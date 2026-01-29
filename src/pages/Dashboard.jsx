@@ -20,7 +20,7 @@ export default function Dashboard() {
   const [statusFilter, setStatusFilter] = useState('ALL');
 
   useEffect(() => {
-    // Sync Theme on Load
+    // 1. Sync Theme on Load
     document.documentElement.setAttribute('data-theme', theme);
     if (theme === 'dark') document.documentElement.classList.add('dark');
     else document.documentElement.classList.remove('dark');
@@ -104,7 +104,6 @@ export default function Dashboard() {
     <div className="min-h-screen p-6 font-sans transition-colors duration-300">
       
       {/* NAVBAR */}
-      {/* Uses CSS Variables for Background and Border */}
       <div className="navbar rounded-2xl mb-8 sticky top-4 z-40 animate-fade flex justify-between shadow-sm backdrop-blur-md bg-[var(--bg-surface)] border border-[var(--border-color)]">
         <div className="flex-1">
           <a className="btn btn-ghost text-2xl font-black tracking-tight text-[var(--text-main)] hover:bg-transparent">
@@ -121,27 +120,26 @@ export default function Dashboard() {
             <Plus size={20} strokeWidth={3} /> <span className="hidden md:inline font-bold">New Ticket</span>
           </button>
 
-          {/* SEARCH BAR */}
-          <div className="form-control relative">
+          {/* SEARCH BAR - Global styles handle the colors/padding now */}
+          <div className="form-control relative hidden md:block">
             <input 
                 type="text" 
                 placeholder="Search tickets..." 
-                // Removed specific BG colors; let global Input styles handle it
-                className="input input-bordered w-32 md:w-64 pl-12 pr-10 rounded-full shadow-inner font-medium transition-all focus:border-indigo-500" 
+                className="input input-bordered w-64 pl-12 pr-10 rounded-full shadow-inner font-medium transition-all focus:border-indigo-500" 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
             />
-            <div className="absolute left-4 top-3 text-slate-400 pointer-events-none">
+            <div className="absolute left-4 top-3.5 text-slate-400 pointer-events-none">
                  <Search size={18} />
             </div>
             {searchQuery && (
-                <button onClick={() => setSearchQuery('')} className="absolute right-3 top-3 text-slate-400 hover:text-red-500">
+                <button onClick={() => setSearchQuery('')} className="absolute right-3 top-3.5 text-slate-400 hover:text-red-500">
                     <XCircle size={18} />
                 </button>
             )}
           </div>
 
-          <button className="btn btn-ghost btn-circle text-[var(--text-main)] hover:bg-slate-100 dark:hover:bg-slate-800" onClick={toggleTheme}>
+          <button className="btn btn-ghost btn-circle text-[var(--text-main)] hover:bg-[var(--bg-subtle)]" onClick={toggleTheme}>
             {theme === 'light' ? <Moon size={20}/> : <Sun size={20}/>}
           </button>
           
@@ -152,20 +150,20 @@ export default function Dashboard() {
                 <span className="text-lg font-bold">{currentUser.initial}</span>
               </div>
             </div>
-            {/* Dropdown Menu - Uses CSS Variables */}
+            {/* Dropdown Menu - Uses variables */}
             <ul tabIndex={0} className="mt-4 z-[1] p-2 shadow-2xl menu menu-sm dropdown-content rounded-xl w-60 bg-[var(--bg-surface)] border border-[var(--border-color)]">
               <li className="menu-title px-4 py-2 border-b border-[var(--border-color)] mb-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Signed In As</span>
+                <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Signed In As</span>
               </li>
               <li className="px-2">
-                <div className="flex flex-col gap-1 items-start p-2 hover:bg-slate-50 dark:hover:bg-slate-700/50 rounded-lg">
+                <div className="flex flex-col gap-1 items-start p-2 hover:bg-[var(--bg-subtle)] rounded-lg">
                     <span className="font-bold text-sm truncate w-full text-[var(--text-main)]">{currentUser.email}</span>
                     <span className="badge badge-sm badge-neutral uppercase font-bold text-[10px] tracking-wide text-white">{currentUser.role}</span>
                 </div>
               </li>
               <div className="divider my-1 border-[var(--border-color)]"></div> 
               <li>
-                <button onClick={handleLogout} className="text-red-600 font-bold py-3 hover:bg-red-50 dark:hover:bg-slate-800 rounded-lg">
+                <button onClick={handleLogout} className="text-red-600 font-bold py-3 hover:bg-[var(--bg-subtle)] rounded-lg">
                   <LogOut size={16} /> Logout
                 </button>
               </li>
@@ -177,20 +175,20 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 animate-fade">
         <div className="lg:col-span-1">
           
-          {/* FILTER SIDEBAR */}
-          {/* Replaced hardcoded classes with CSS Variables */}
-          <div className="card sticky top-28 shadow-sm bg-[var(--bg-surface)] border border-[var(--border-color)]">
-            <div className="card-body p-6">
+          {/* FILTER SIDEBAR - Uses Semantic 'content-card' styling logic */}
+          <div className="sticky top-28 rounded-2xl shadow-sm bg-[var(--bg-surface)] border border-[var(--border-color)]">
+            <div className="p-6">
               <div className="flex justify-between items-center mb-6 border-b border-[var(--border-color)] pb-4">
                   <h3 className="font-black text-[var(--text-main)] flex gap-2 items-center text-lg"><Filter size={20}/> Filters</h3>
                   {(statusFilter !== 'ALL' || searchQuery) && (
                       <button onClick={() => {setStatusFilter('ALL'); setSearchQuery('')}} className="text-xs text-red-600 font-bold hover:underline">RESET</button>
                   )}
               </div>
+              
               <div className="form-control w-full">
-                <label className="label py-0 mb-2"><span className="label-text text-xs font-bold uppercase text-slate-400">Ticket Status</span></label>
+                <label className="label py-0 mb-2"><span className="label-text text-xs font-bold uppercase text-[var(--text-muted)]">Ticket Status</span></label>
+                {/* Select is auto-styled by Global CSS now */}
                 <select 
-                    // Cleaned up classes to rely on global Index.css styles
                     className="select select-bordered w-full font-bold shadow-sm"
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
@@ -204,11 +202,18 @@ export default function Dashboard() {
                   <option value="completed">Completed</option>
                 </select>
               </div>
+
+              {/* Mobile Search (Visible only on small screens) */}
+              <div className="form-control w-full mt-4 md:hidden">
+                 <label className="label py-0 mb-2"><span className="label-text text-xs font-bold uppercase text-[var(--text-muted)]">Search</span></label>
+                 <input type="text" className="input input-bordered w-full" placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+              </div>
+
               <div className="mt-8 pt-6 border-t border-[var(--border-color)]">
                   <div className="stat p-0">
-                    <div className="stat-title text-xs font-bold uppercase text-slate-400 mb-1">Active Workload</div>
+                    <div className="stat-title text-xs font-bold uppercase text-[var(--text-muted)] mb-1">Active Workload</div>
                     <div className="stat-value text-4xl text-primary font-black tracking-tight">{tickets.length}</div>
-                    <div className="stat-desc font-semibold text-slate-400 mt-1">tickets in database</div>
+                    <div className="stat-desc font-semibold text-[var(--text-muted)] mt-1">tickets in database</div>
                   </div>
               </div>
             </div>
@@ -221,9 +226,9 @@ export default function Dashboard() {
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
                     {filteredTickets.length === 0 && (
-                    <div className="col-span-full text-center p-12 text-slate-400 border-2 border-dashed border-[var(--border-color)] rounded-2xl bg-[var(--bg-surface)]">
+                    <div className="col-span-full text-center p-12 border-2 border-dashed border-[var(--border-color)] rounded-2xl bg-[var(--bg-surface)]">
                         <p className="font-bold text-xl text-[var(--text-main)]">No tickets found</p>
-                        <p className="text-sm mt-2 text-slate-500">Adjust your filters to see results.</p>
+                        <p className="text-sm mt-2 text-[var(--text-muted)]">Adjust your filters to see results.</p>
                         <button className="btn btn-outline btn-sm mt-6 text-[var(--text-main)]" onClick={() => {setStatusFilter('ALL'); setSearchQuery('')}}>Clear Filters</button>
                     </div>
                     )}

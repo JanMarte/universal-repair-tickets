@@ -1,133 +1,134 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
-import { ArrowLeft, Wrench, Calendar, Phone, Hash } from 'lucide-react';
+import { ArrowLeft, Phone, Mail, Wrench, Clock, Calendar } from 'lucide-react';
 import { format } from 'date-fns';
 
 export default function CustomerHistory() {
-    const { id } = useParams();
-    const navigate = useNavigate();
-    const [customer, setCustomer] = useState(null);
-    const [history, setHistory] = useState([]);
-    const [loading, setLoading] = useState(true);
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const [customer, setCustomer] = useState(null);
+  const [tickets, setTickets] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        fetchHistory();
-    }, [id]);
+  useEffect(() => {
+    async function fetchData() {
+      // 1. Get Customer Details
+      const { data: custData } = await supabase.from('customers').select('*').eq('id', id).single();
+      setCustomer(custData);
 
-    async function fetchHistory() {
-        const { data: custData, error: custError } = await supabase
-            .from('customers')
-            .select('*')
-            .eq('id', id)
-            .single();
-
-        if (custError) {
-            console.error(custError);
-            setLoading(false);
-            return;
-        }
-
-        setCustomer(custData);
-
-        const { data: tickets, error: ticketError } = await supabase
-            .from('tickets')
-            .select('*')
-            .eq('customer_id', id)
-            .order('created_at', { ascending: false });
-
-        if (!ticketError) setHistory(tickets);
-        setLoading(false);
+      // 2. Get Their Ticket History
+      const { data: ticketData } = await supabase.from('tickets').select('*').eq('customer_id', id).order('created_at', { ascending: false });
+      setTickets(ticketData || []);
+      setLoading(false);
     }
+    fetchData();
+  }, [id]);
 
-    if (loading) return <div className="p-10 text-center"><span className="loading loading-spinner loading-lg text-primary"></span></div>;
-    if (!customer) return <div className="p-10 text-center text-xl font-bold dark:text-white">Customer not found.</div>;
+  if (loading) return <div className="p-10 text-center"><span className="loading loading-spinner loading-lg text-primary"></span></div>;
+  if (!customer) return <div className="p-10 text-center text-xl font-bold text-[var(--text-main)]">Customer not found.</div>;
 
-    return (
-        <div className="min-h-screen p-6 font-sans">
+  return (
+    <div className="min-h-screen p-6 font-sans">
+      
+      {/* HEADER */}
+      <div className="rounded-2xl p-6 mb-8 flex items-center gap-4 animate-fade shadow-sm backdrop-blur-md bg-[var(--bg-surface)] border border-[var(--border-color)]">
+        <button onClick={() => navigate(-1)} className="btn btn-circle btn-ghost hover:bg-[var(--bg-subtle)]">
+            <ArrowLeft size={24} className="text-[var(--text-main)]"/>
+        </button>
+        <div>
+            <h1 className="text-3xl font-black text-[var(--text-main)] tracking-tight">{customer.full_name}</h1>
+            <p className="text-[var(--text-muted)] font-medium">Customer Profile & History</p>
+        </div>
+      </div>
 
-            {/* HEADER - Glass Panel */}
-            <div className="glass-panel rounded-2xl p-6 mb-8 flex items-center gap-6 animate-fade bg-white/80 dark:bg-slate-800/80">
-                <button onClick={() => navigate(-1)} className="btn btn-circle btn-ghost hover:bg-white dark:hover:bg-slate-700 transition-colors">
-                    <ArrowLeft size={24} className="text-slate-700 dark:text-slate-200" />
-                </button>
-                <div>
-                    <h1 className="text-3xl font-black text-slate-800 dark:text-white">{customer.full_name}</h1>
-                    <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 font-medium mt-1">
-                        <Calendar size={16} />
-                        <p>Customer since {format(new Date(customer.created_at), 'MMMM yyyy')}</p>
-                    </div>
-                </div>
-            </div>
-
-            {/* STATS ROW */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 animate-fade">
-                <div className="stat bg-white dark:bg-slate-800 shadow-lg rounded-2xl border border-slate-200 dark:border-slate-700 card-hover-effect">
-                    <div className="stat-figure text-primary/20 dark:text-primary/40">
-                        <Wrench size={64} strokeWidth={1} />
-                    </div>
-                    <div className="stat-title text-slate-500 dark:text-slate-400 font-bold uppercase text-xs tracking-wider">Total Repairs</div>
-                    <div className="stat-value text-primary text-5xl font-black">{customer.total_repairs}</div>
-                    <div className="stat-desc text-slate-400 font-medium mt-1">Lifetime Service Count</div>
-                </div>
-
-                <div className="stat bg-white dark:bg-slate-800 shadow-lg rounded-2xl border border-slate-200 dark:border-slate-700 card-hover-effect">
-                    <div className="stat-figure text-secondary/20 dark:text-secondary/40">
-                        <Phone size={64} strokeWidth={1} />
-                    </div>
-                    <div className="stat-title text-slate-500 dark:text-slate-400 font-bold uppercase text-xs tracking-wider">Contact Number</div>
-                    <div className="stat-value text-slate-800 dark:text-white text-3xl font-bold">{customer.phone}</div>
-                    <div className="stat-desc text-slate-400 font-medium mt-1">Primary Phone</div>
-                </div>
-            </div>
-
-            {/* HISTORY LIST */}
-            <div className="animate-fade">
-                <h2 className="text-lg font-black text-slate-800 dark:text-white mb-5 flex items-center gap-3 uppercase tracking-wide">
-                    Repair History
-                    <span className="badge badge-neutral text-white font-bold">{history.length}</span>
-                </h2>
-
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-fade">
+        
+        {/* LEFT COLUMN: Customer Stats */}
+        <div className="lg:col-span-1 space-y-6">
+            
+            {/* Contact Card */}
+            <div className="content-card">
+                <h2 className="text-xs font-bold uppercase text-[var(--text-muted)] tracking-wider mb-4 border-b border-[var(--border-color)] pb-2">Contact Details</h2>
                 <div className="space-y-4">
-                    {history.map(ticket => (
-                        <div
-                            key={ticket.id}
-                            className="card bg-white dark:bg-slate-800 shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer border border-slate-200 dark:border-slate-700 group overflow-hidden"
-                            onClick={() => navigate(`/ticket/${ticket.id}`)}
-                        >
-                            {/* Status Stripe */}
-                            <div className={`h-full w-1.5 absolute left-0 top-0 bottom-0 ${ticket.status === 'completed' ? 'bg-emerald-500' : 'bg-primary'}`}></div>
+                    <div className="flex items-center gap-3 p-3 rounded-xl bg-[var(--bg-subtle)] border border-[var(--border-color)]">
+                        <div className="bg-white dark:bg-slate-700 p-2 rounded-full shadow-sm text-indigo-500"><Phone size={20}/></div>
+                        <div>
+                            <div className="text-xs text-[var(--text-muted)] font-bold uppercase">Phone</div>
+                            <div className="text-[var(--text-main)] font-mono font-bold text-lg">{customer.phone}</div>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-3 p-3 rounded-xl bg-[var(--bg-subtle)] border border-[var(--border-color)]">
+                        <div className="bg-white dark:bg-slate-700 p-2 rounded-full shadow-sm text-purple-500"><Mail size={20}/></div>
+                        <div>
+                            <div className="text-xs text-[var(--text-muted)] font-bold uppercase">Email</div>
+                            <div className="text-[var(--text-main)] font-medium break-all">{customer.email}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
-                            <div className="card-body flex-row justify-between items-center p-6 pl-8">
-                                <div>
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <span className="text-xs text-slate-400 dark:text-slate-500 font-bold uppercase flex items-center gap-1">
-                                            <Calendar size={12} />
-                                            {format(new Date(ticket.created_at), 'MMM dd, yyyy')}
-                                        </span>
-                                    </div>
-                                    <h3 className="font-black text-xl text-slate-800 dark:text-white group-hover:text-primary transition-colors">
-                                        {ticket.brand} <span className="font-normal text-slate-500 dark:text-slate-400">{ticket.model}</span>
-                                    </h3>
-                                    <p className="text-sm text-slate-600 dark:text-slate-300 mt-1 line-clamp-1 italic">
-                                        "{ticket.description}"
-                                    </p>
-                                </div>
+            {/* Stats Card */}
+            <div className="content-card">
+                <h2 className="text-xs font-bold uppercase text-[var(--text-muted)] tracking-wider mb-4 border-b border-[var(--border-color)] pb-2">Repair Stats</h2>
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="text-center p-4 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800">
+                        <div className="text-3xl font-black text-indigo-600 dark:text-indigo-400">{tickets.length}</div>
+                        <div className="text-xs font-bold text-indigo-400 dark:text-indigo-300 uppercase mt-1">Total Repairs</div>
+                    </div>
+                    <div className="text-center p-4 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-800">
+                         {/* Calculating completed repairs */}
+                        <div className="text-3xl font-black text-green-600 dark:text-green-400">
+                            {tickets.filter(t => t.status === 'completed').length}
+                        </div>
+                        <div className="text-xs font-bold text-green-500 dark:text-green-300 uppercase mt-1">Completed</div>
+                    </div>
+                </div>
+            </div>
+        </div>
 
-                                <div className="text-right flex flex-col items-end gap-2">
-                                    <div className={`badge ${ticket.status === 'completed' ? 'badge-success text-white' : 'badge-warning text-white'} font-bold uppercase p-3 tracking-wide`}>
-                                        {ticket.status.replace('_', ' ')}
-                                    </div>
-                                    <div className="text-xs font-mono font-bold text-slate-300 dark:text-slate-600 flex items-center gap-1">
-                                        <Hash size={12} /> {ticket.id}
-                                    </div>
-                                </div>
+        {/* RIGHT COLUMN: Ticket History List */}
+        <div className="lg:col-span-2">
+            <h2 className="text-xl font-black text-[var(--text-main)] mb-4 flex items-center gap-2">
+                <Clock size={24} className="text-[var(--text-muted)]"/> Repair History
+            </h2>
+
+            <div className="space-y-4">
+                {tickets.map(ticket => (
+                    // Using a simplified version of the Ticket Card for this list view
+                    <div 
+                        key={ticket.id} 
+                        onClick={() => navigate(`/ticket/${ticket.id}`)}
+                        className="group flex flex-col md:flex-row justify-between items-start md:items-center p-5 rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface)] hover:shadow-lg hover:border-indigo-300 transition-all cursor-pointer relative overflow-hidden"
+                    >
+                        {/* Hover Highlight Line */}
+                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-transparent group-hover:bg-indigo-500 transition-colors"></div>
+
+                        <div className="flex items-center gap-4 mb-3 md:mb-0">
+                            <div className="bg-[var(--bg-subtle)] p-3 rounded-lg text-[var(--text-muted)] group-hover:text-indigo-500 transition-colors">
+                                <Wrench size={24} />
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-lg text-[var(--text-main)]">{ticket.brand} {ticket.model}</h3>
+                                <p className="text-sm text-[var(--text-muted)] line-clamp-1 italic">"{ticket.description}"</p>
                             </div>
                         </div>
-                    ))}
-                </div>
-            </div>
 
+                        <div className="flex items-center gap-6 w-full md:w-auto justify-between md:justify-end">
+                            <div className="flex items-center gap-2 text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">
+                                <Calendar size={14} />
+                                {format(new Date(ticket.created_at), 'MMM d, yyyy')}
+                            </div>
+                            <div className={`badge ${ticket.status === 'completed' ? 'badge-success text-white' : 'badge-ghost'} font-bold uppercase p-3`}>
+                                {ticket.status.replace('_', ' ')}
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
         </div>
-    );
+
+      </div>
+    </div>
+  );
 }
