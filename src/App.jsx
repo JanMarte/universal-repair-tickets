@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
 import { ToastProvider } from './context/ToastProvider';
+import PrintLabel from './pages/PrintLabel';
 
 // COMPONENTS
 import AutoLogout from './components/AutoLogout'; // <--- Added Security
@@ -103,6 +104,13 @@ function App() {
           <Route
             path="/ticket/:id"
             element={session ? <TicketDetail /> : <Navigate to="/login" />}
+          />
+
+          {/* --- NEW PRINT LABEL ROUTE --- */}
+          {/* Only Staff should be able to access the label generator */}
+          <Route
+            path="/print/:id"
+            element={session && isStaff ? <PrintLabel /> : <Navigate to="/" />}
           />
 
           {/* CUSTOMER HISTORY - Staff Only */}

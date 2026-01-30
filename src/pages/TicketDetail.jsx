@@ -1,10 +1,16 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import EstimateBuilder from '../components/EstimateBuilder';
-import CustomerEstimateView from '../components/CustomerEstimateView'; // <--- IMPORTANT IMPORT
-import { supabase } from '../supabaseClient';
-import { ArrowLeft, Send, MessageSquare, Lock, Globe, AlertTriangle, Save, X, Edit3 } from 'lucide-react';
+import { useReactToPrint } from 'react-to-print';
 import { format } from 'date-fns';
+import {
+    ArrowLeft, Send, MessageSquare, Lock, Globe,
+    AlertTriangle, Save, X, Edit3, Printer
+} from 'lucide-react';
+
+import { supabase } from '../supabaseClient';
+import EstimateBuilder from '../components/EstimateBuilder';
+import CustomerEstimateView from '../components/CustomerEstimateView';
+import { TicketLabel } from '../components/TicketLabel';
 import { useToast } from '../context/ToastProvider';
 import { formatPhoneNumber } from '../utils';
 
@@ -13,24 +19,38 @@ export default function TicketDetail() {
     const navigate = useNavigate();
     const { addToast } = useToast();
 
+    // Data State
     const [ticket, setTicket] = useState(null);
     const [messages, setMessages] = useState([]);
     const [loading, setLoading] = useState(true);
     const [userRole, setUserRole] = useState('customer');
 
-    // Edit Mode States
+    // UI State
     const [isEditing, setIsEditing] = useState(false);
     const [editForm, setEditForm] = useState({});
-
     const [newMessage, setNewMessage] = useState('');
     const [activeTab, setActiveTab] = useState('public');
     const [isSending, setIsSending] = useState(false);
 
+    // Refs
     const chatEndRef = useRef(null);
     const inputRef = useRef(null);
+    const labelRef = useRef(null); // Ref for the Printer
 
     // HELPER: Check if user is ANY kind of staff
     const isStaff = ['employee', 'manager', 'admin'].includes(userRole);
+
+    // PRINTING HOOK (Debug Version)
+    const handlePrint = useReactToPrint({
+        content: () => {
+            const ref = labelRef.current;
+            console.log("Printer is looking for content...", ref); // Check Console for this!
+            return ref;
+        },
+        documentTitle: `Label_Ticket_${id}`,
+        onAfterPrint: () => addToast('Label sent to printer', 'success'),
+        onPrintError: (error) => console.error("Print failed:", error),
+    });
 
     useEffect(() => { fetchData(); }, [id]);
 
@@ -50,7 +70,6 @@ export default function TicketDetail() {
             const role = profile?.role || 'customer';
             setUserRole(role);
 
-            // Default to Internal tab for ANY staff member
             if (['employee', 'manager', 'admin'].includes(role)) {
                 setActiveTab('internal');
             }
@@ -84,7 +103,6 @@ export default function TicketDetail() {
         }
     };
 
-    // SYNC TOTAL: This updates the main ticket record whenever the line items change
     const handleEstimateUpdate = async (newTotal) => {
         if (ticket.estimate_total !== newTotal) {
             const { error } = await supabase
@@ -147,7 +165,6 @@ export default function TicketDetail() {
 
     return (
         <div className="min-h-screen p-6 font-sans">
-
             {/* HEADER BAR */}
             <div className="rounded-2xl p-6 mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4 animate-fade shadow-sm backdrop-blur-md bg-[var(--bg-surface)] border border-[var(--border-color)]">
                 <div className="flex items-center gap-4">
@@ -167,6 +184,17 @@ export default function TicketDetail() {
                     </div>
                 </div>
                 <div className="flex gap-3 items-center">
+                    {/* PRINT LABEL BUTTON (Simple Pop-up) */}
+                    {isStaff && (
+                        <button
+                            onClick={() => window.open(`/print/${id}`, '_blank', 'width=400,height=600')}
+                            className="btn btn-circle btn-ghost hover:bg-[var(--bg-subtle)] text-[var(--text-main)] tooltip tooltip-bottom"
+                            data-tip="Print Label"
+                        >
+                            <Printer size={20} />
+                        </button>
+                    )}
+
                     {isStaff ? (
                         <div className="form-control">
                             <select className="select select-bordered font-bold shadow-sm bg-[var(--bg-surface)] text-[var(--text-main)]" value={ticket.status} onChange={(e) => updateStatus(e.target.value)}>
@@ -188,11 +216,8 @@ export default function TicketDetail() {
 
             {/* MAIN GRID LAYOUT */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade">
-
-                {/* LEFT COLUMN (2/3 width) - Customer & Tech Info */}
+                {/* LEFT COLUMN */}
                 <div className="lg:col-span-2 space-y-6">
-
-                    {/* Customer Info Box */}
                     <div className="content-card">
                         <h2 className="text-xs font-bold uppercase text-[var(--text-muted)] tracking-wider mb-4 border-b border-[var(--border-color)] pb-2">Customer Information</h2>
                         <div className="flex justify-between items-center">
@@ -208,11 +233,9 @@ export default function TicketDetail() {
                         </div>
                     </div>
 
-                    {/* TECHNICAL DETAILS CARD */}
                     <div className="content-card relative">
                         <div className="flex justify-between items-center border-b border-[var(--border-color)] pb-2 mb-4">
                             <h2 className="text-xs font-bold uppercase text-[var(--text-muted)] tracking-wider">Technical Issue</h2>
-                            {/* EDIT BUTTONS */}
                             {(userRole === 'manager' || userRole === 'admin') && (
                                 <div>
                                     {isEditing ? (
@@ -230,7 +253,6 @@ export default function TicketDetail() {
                         </div>
 
                         {isEditing ? (
-                            // EDIT FORM
                             <div className="space-y-4 animate-fade">
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="form-control">
@@ -249,13 +271,10 @@ export default function TicketDetail() {
                                 <textarea className="textarea textarea-bordered w-full text-base bg-[var(--bg-surface)] text-[var(--text-main)]" rows={4} value={editForm.description} onChange={e => setEditForm({ ...editForm, description: e.target.value })}></textarea>
                             </div>
                         ) : (
-                            // VIEW MODE
                             <>
                                 <div className="bg-[var(--bg-subtle)] p-5 rounded-xl border border-[var(--border-color)] text-[var(--text-main)] whitespace-pre-wrap font-medium leading-relaxed">
                                     {ticket.description}
                                 </div>
-
-                                {/* STAFF VIEW: BUILDER */}
                                 {isStaff && (
                                     <>
                                         <div className="mt-6">
@@ -267,17 +286,11 @@ export default function TicketDetail() {
                                                 {ticket.is_backordered && <AlertTriangle className="text-red-500 ml-auto" />}
                                             </label>
                                         </div>
-
                                         <div className="animate-fade-in-up mt-6 border-t border-[var(--border-color)] pt-6">
-                                            <EstimateBuilder
-                                                ticketId={id}
-                                                onTotalChange={handleEstimateUpdate}
-                                            />
+                                            <EstimateBuilder ticketId={id} onTotalChange={handleEstimateUpdate} />
                                         </div>
                                     </>
                                 )}
-
-                                {/* CUSTOMER VIEW: APPROVAL CARD */}
                                 {!isStaff && (
                                     <div className="animate-fade-in-up mt-6 border-t border-[var(--border-color)] pt-6">
                                         <CustomerEstimateView ticketId={id} />
@@ -288,7 +301,7 @@ export default function TicketDetail() {
                     </div>
                 </div>
 
-                {/* RIGHT COLUMN (1/3 width) - CHAT INTERFACE */}
+                {/* RIGHT COLUMN */}
                 <div className="col-span-1">
                     <div className="rounded-2xl shadow-xl flex flex-col h-[600px] overflow-hidden border border-[var(--border-color)] bg-[var(--bg-surface)] sticky top-6">
                         {isStaff ? (
@@ -305,7 +318,6 @@ export default function TicketDetail() {
                                 <Globe size={18} /> Support Chat
                             </div>
                         )}
-
                         <div className={`flex-1 overflow-y-auto p-4 space-y-4 ${activeTab === 'internal' ? 'bg-yellow-50/50 dark:bg-yellow-900/10' : 'bg-[var(--bg-subtle)]'}`}>
                             {filteredMessages.length === 0 && (
                                 <div className="flex flex-col items-center justify-center h-full text-[var(--text-muted)] space-y-2 opacity-50">
@@ -313,7 +325,6 @@ export default function TicketDetail() {
                                     <span className="text-sm font-bold">No messages yet.</span>
                                 </div>
                             )}
-
                             {filteredMessages.map((msg) => {
                                 const isCustomer = msg.sender_name === 'Customer';
                                 let bubbleClass = '';
@@ -324,7 +335,6 @@ export default function TicketDetail() {
                                 } else {
                                     bubbleClass = 'bg-indigo-600 text-white';
                                 }
-
                                 return (
                                     <div key={msg.id} className={`chat ${isCustomer ? 'chat-start' : 'chat-end'}`}>
                                         <div className="chat-header text-xs text-[var(--text-muted)] font-bold mb-1 opacity-70">
@@ -338,42 +348,27 @@ export default function TicketDetail() {
                             })}
                             <div ref={chatEndRef}></div>
                         </div>
-
                         <form onSubmit={sendMessage} className="p-4 bg-[var(--bg-surface)] border-t border-[var(--border-color)]">
                             <div className="flex gap-2 items-end">
-                                <textarea
-                                    ref={inputRef}
-                                    rows={1}
-                                    placeholder={activeTab === 'internal' ? "Private note..." : "Message..."}
-                                    className={`textarea textarea-bordered w-full resize-none overflow-hidden min-h-[3rem] text-base py-3 leading-normal
-                                    bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] transition-all text-[var(--text-main)]
-                                    ${activeTab === 'internal' ? 'focus:border-yellow-500' : 'focus:border-primary'}`}
-                                    value={newMessage}
-                                    onChange={(e) => setNewMessage(e.target.value)}
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter' && !e.shiftKey) {
-                                            e.preventDefault();
-                                            sendMessage(e);
-                                        }
-                                    }}
-                                    disabled={isSending}
-                                />
-
-                                <button
-                                    type="submit"
-                                    className={`btn btn-square shadow-sm h-12 w-12 flex-shrink-0 ${activeTab === 'internal' ? 'btn-warning text-white' : 'btn-primary text-white'}`}
-                                    disabled={isSending || !newMessage.trim()}
-                                >
+                                <textarea ref={inputRef} rows={1} placeholder={activeTab === 'internal' ? "Private note..." : "Message..."} className={`textarea textarea-bordered w-full resize-none overflow-hidden min-h-[3rem] text-base py-3 leading-normal bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] transition-all text-[var(--text-main)] ${activeTab === 'internal' ? 'focus:border-yellow-500' : 'focus:border-primary'}`} value={newMessage} onChange={(e) => setNewMessage(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(e); } }} disabled={isSending} />
+                                <button type="submit" className={`btn btn-square shadow-sm h-12 w-12 flex-shrink-0 ${activeTab === 'internal' ? 'btn-warning text-white' : 'btn-primary text-white'}`} disabled={isSending || !newMessage.trim()}>
                                     {isSending ? <span className="loading loading-spinner loading-xs"></span> : <Send size={20} />}
                                 </button>
                             </div>
                         </form>
                     </div>
                 </div>
-                {/* END RIGHT COLUMN */}
-
             </div>
-            {/* END MAIN GRID */}
-        </div>
+
+            {/* --- DEBUG: SIMPLE TEST PRINT --- */}
+            <div style={{ position: 'absolute', top: '-10000px', left: '-10000px' }}>
+                <div ref={labelRef} style={{ width: '4in', height: '6in', border: '5px solid red', padding: '20px' }}>
+                    <h1>TEST PRINT</h1>
+                    <p>If you can see this, the printer logic works.</p>
+                    <p>Ticket ID: {ticket ? ticket.id : 'Loading...'}</p>
+                </div>
+            </div>
+
+        </div> // <--- Closing div of the page
     );
 }
