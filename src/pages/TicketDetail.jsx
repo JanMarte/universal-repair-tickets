@@ -1,5 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import EstimateBuilder from '../components/EstimateBuilder';
+import CustomerEstimateView from '../components/CustomerEstimateView'; // <--- IMPORTANT IMPORT
 import { supabase } from '../supabaseClient';
 import { ArrowLeft, Send, MessageSquare, Lock, Globe, AlertTriangle, Save, X, Edit3 } from 'lucide-react';
 import { format } from 'date-fns';
@@ -82,12 +84,25 @@ export default function TicketDetail() {
         }
     };
 
+    // SYNC TOTAL: This updates the main ticket record whenever the line items change
+    const handleEstimateUpdate = async (newTotal) => {
+        if (ticket.estimate_total !== newTotal) {
+            const { error } = await supabase
+                .from('tickets')
+                .update({ estimate_total: newTotal })
+                .eq('id', id);
+
+            if (!error) {
+                setTicket(prev => ({ ...prev, estimate_total: newTotal }));
+            }
+        }
+    };
+
     const sendMessage = async (e) => {
         e.preventDefault();
         if (!newMessage.trim() || isSending) return;
         setIsSending(true);
 
-        // Logic Update: Checks isStaff instead of just 'employee'
         const isInternalNote = isStaff ? (activeTab === 'internal') : false;
         const senderName = isStaff ? 'Staff' : 'Customer';
 
@@ -119,10 +134,7 @@ export default function TicketDetail() {
     };
 
     const filteredMessages = messages.filter(msg => {
-        // Customers can NEVER see internal notes
         if (!isStaff && msg.is_internal) return false;
-
-        // Staff filter based on tab
         if (isStaff) {
             if (activeTab === 'internal') return msg.is_internal === true;
             if (activeTab === 'public') return msg.is_internal === false;
@@ -174,7 +186,10 @@ export default function TicketDetail() {
                 </div>
             </div>
 
+            {/* MAIN GRID LAYOUT */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade">
+
+                {/* LEFT COLUMN (2/3 width) - Customer & Tech Info */}
                 <div className="lg:col-span-2 space-y-6">
 
                     {/* Customer Info Box */}
@@ -193,12 +208,11 @@ export default function TicketDetail() {
                         </div>
                     </div>
 
-                    {/* DETAILS CARD */}
+                    {/* TECHNICAL DETAILS CARD */}
                     <div className="content-card relative">
                         <div className="flex justify-between items-center border-b border-[var(--border-color)] pb-2 mb-4">
                             <h2 className="text-xs font-bold uppercase text-[var(--text-muted)] tracking-wider">Technical Issue</h2>
-
-                            {/* EDIT BUTTONS (Only for Managers/Admins) */}
+                            {/* EDIT BUTTONS */}
                             {(userRole === 'manager' || userRole === 'admin') && (
                                 <div>
                                     {isEditing ? (
@@ -216,7 +230,7 @@ export default function TicketDetail() {
                         </div>
 
                         {isEditing ? (
-                            // EDIT MODE
+                            // EDIT FORM
                             <div className="space-y-4 animate-fade">
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="form-control">
@@ -241,15 +255,32 @@ export default function TicketDetail() {
                                     {ticket.description}
                                 </div>
 
+                                {/* STAFF VIEW: BUILDER */}
                                 {isStaff && (
-                                    <div className="mt-6">
-                                        <label className={`flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${ticket.is_backordered ? 'border-red-500 bg-red-50 dark:bg-red-900/20' : 'border-[var(--border-color)] hover:bg-[var(--bg-subtle)]'}`}>
-                                            <input type="checkbox" className="checkbox checkbox-error" checked={ticket.is_backordered} onChange={(e) => toggleBackorder(e.target.checked)} />
-                                            <span className={`font-bold ${ticket.is_backordered ? 'text-red-600 dark:text-red-400' : 'text-[var(--text-muted)]'}`}>
-                                                {ticket.is_backordered ? 'Currently Waiting on Parts' : 'Mark as Waiting on Parts'}
-                                            </span>
-                                            {ticket.is_backordered && <AlertTriangle className="text-red-500 ml-auto" />}
-                                        </label>
+                                    <>
+                                        <div className="mt-6">
+                                            <label className={`flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${ticket.is_backordered ? 'border-red-500 bg-red-50 dark:bg-red-900/20' : 'border-[var(--border-color)] hover:bg-[var(--bg-subtle)]'}`}>
+                                                <input type="checkbox" className="checkbox checkbox-error" checked={ticket.is_backordered} onChange={(e) => toggleBackorder(e.target.checked)} />
+                                                <span className={`font-bold ${ticket.is_backordered ? 'text-red-600 dark:text-red-400' : 'text-[var(--text-muted)]'}`}>
+                                                    {ticket.is_backordered ? 'Currently Waiting on Parts' : 'Mark as Waiting on Parts'}
+                                                </span>
+                                                {ticket.is_backordered && <AlertTriangle className="text-red-500 ml-auto" />}
+                                            </label>
+                                        </div>
+
+                                        <div className="animate-fade-in-up mt-6 border-t border-[var(--border-color)] pt-6">
+                                            <EstimateBuilder
+                                                ticketId={id}
+                                                onTotalChange={handleEstimateUpdate}
+                                            />
+                                        </div>
+                                    </>
+                                )}
+
+                                {/* CUSTOMER VIEW: APPROVAL CARD */}
+                                {!isStaff && (
+                                    <div className="animate-fade-in-up mt-6 border-t border-[var(--border-color)] pt-6">
+                                        <CustomerEstimateView ticketId={id} />
                                     </div>
                                 )}
                             </>
@@ -257,87 +288,92 @@ export default function TicketDetail() {
                     </div>
                 </div>
 
-                {/* CHAT INTERFACE */}
-                <div className="rounded-2xl shadow-xl flex flex-col h-[600px] overflow-hidden border border-[var(--border-color)] bg-[var(--bg-surface)]">
-                    {isStaff ? (
-                        <div role="tablist" className="tabs tabs-lifted bg-[var(--bg-subtle)] p-2">
-                            <a role="tab" className={`tab font-bold transition-all flex-1 ${activeTab === 'internal' ? 'tab-active bg-[var(--bg-surface)] text-yellow-600 border-t-2 border-yellow-500' : 'text-slate-400'}`} onClick={() => setActiveTab('internal')}>
-                                <Lock size={14} className="mr-2" /> Notes
-                            </a>
-                            <a role="tab" className={`tab font-bold transition-all flex-1 ${activeTab === 'public' ? 'tab-active bg-[var(--bg-surface)] text-primary border-t-2 border-primary' : 'text-slate-400'}`} onClick={() => setActiveTab('public')}>
-                                <Globe size={14} className="mr-2" /> Chat
-                            </a>
-                        </div>
-                    ) : (
-                        <div className="p-4 bg-primary text-white font-bold flex items-center gap-2 shadow-md">
-                            <Globe size={18} /> Support Chat
-                        </div>
-                    )}
-
-                    <div className={`flex-1 overflow-y-auto p-4 space-y-4 ${activeTab === 'internal' ? 'bg-yellow-50/50 dark:bg-yellow-900/10' : 'bg-[var(--bg-subtle)]'}`}>
-                        {filteredMessages.length === 0 && (
-                            <div className="flex flex-col items-center justify-center h-full text-[var(--text-muted)] space-y-2 opacity-50">
-                                <MessageSquare size={48} />
-                                <span className="text-sm font-bold">No messages yet.</span>
+                {/* RIGHT COLUMN (1/3 width) - CHAT INTERFACE */}
+                <div className="col-span-1">
+                    <div className="rounded-2xl shadow-xl flex flex-col h-[600px] overflow-hidden border border-[var(--border-color)] bg-[var(--bg-surface)] sticky top-6">
+                        {isStaff ? (
+                            <div role="tablist" className="tabs tabs-lifted bg-[var(--bg-subtle)] p-2">
+                                <a role="tab" className={`tab font-bold transition-all flex-1 ${activeTab === 'internal' ? 'tab-active bg-[var(--bg-surface)] text-yellow-600 border-t-2 border-yellow-500' : 'text-slate-400'}`} onClick={() => setActiveTab('internal')}>
+                                    <Lock size={14} className="mr-2" /> Notes
+                                </a>
+                                <a role="tab" className={`tab font-bold transition-all flex-1 ${activeTab === 'public' ? 'tab-active bg-[var(--bg-surface)] text-primary border-t-2 border-primary' : 'text-slate-400'}`} onClick={() => setActiveTab('public')}>
+                                    <Globe size={14} className="mr-2" /> Chat
+                                </a>
+                            </div>
+                        ) : (
+                            <div className="p-4 bg-primary text-white font-bold flex items-center gap-2 shadow-md">
+                                <Globe size={18} /> Support Chat
                             </div>
                         )}
 
-                        {filteredMessages.map((msg) => {
-                            const isCustomer = msg.sender_name === 'Customer';
-                            let bubbleClass = '';
-                            if (msg.is_internal) {
-                                bubbleClass = 'bg-yellow-100 text-yellow-900 border border-yellow-200';
-                            } else if (isCustomer) {
-                                bubbleClass = 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white border border-slate-200 dark:border-slate-600';
-                            } else {
-                                bubbleClass = 'bg-indigo-600 text-white';
-                            }
-
-                            return (
-                                <div key={msg.id} className={`chat ${isCustomer ? 'chat-start' : 'chat-end'}`}>
-                                    <div className="chat-header text-xs text-[var(--text-muted)] font-bold mb-1 opacity-70">
-                                        {msg.sender_name} • {format(new Date(msg.created_at), 'h:mm a')}
-                                    </div>
-                                    <div className={`chat-bubble shadow-sm font-medium break-words whitespace-pre-wrap max-w-[85%] ${bubbleClass}`}>
-                                        {msg.message_text}
-                                    </div>
+                        <div className={`flex-1 overflow-y-auto p-4 space-y-4 ${activeTab === 'internal' ? 'bg-yellow-50/50 dark:bg-yellow-900/10' : 'bg-[var(--bg-subtle)]'}`}>
+                            {filteredMessages.length === 0 && (
+                                <div className="flex flex-col items-center justify-center h-full text-[var(--text-muted)] space-y-2 opacity-50">
+                                    <MessageSquare size={48} />
+                                    <span className="text-sm font-bold">No messages yet.</span>
                                 </div>
-                            );
-                        })}
-                        <div ref={chatEndRef}></div>
-                    </div>
+                            )}
 
-                    <form onSubmit={sendMessage} className="p-4 bg-[var(--bg-surface)] border-t border-[var(--border-color)]">
-                        <div className="flex gap-2 items-end">
-                            <textarea
-                                ref={inputRef}
-                                rows={1}
-                                placeholder={activeTab === 'internal' ? "Private note... (Shift+Enter for new line)" : "Message... (Shift+Enter for new line)"}
-                                className={`textarea textarea-bordered w-full resize-none overflow-hidden min-h-[3rem] text-base py-3 leading-normal
-                            bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] transition-all text-[var(--text-main)]
-                            ${activeTab === 'internal' ? 'focus:border-yellow-500' : 'focus:border-primary'}`}
-                                value={newMessage}
-                                onChange={(e) => setNewMessage(e.target.value)}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter' && !e.shiftKey) {
-                                        e.preventDefault();
-                                        sendMessage(e);
-                                    }
-                                }}
-                                disabled={isSending}
-                            />
+                            {filteredMessages.map((msg) => {
+                                const isCustomer = msg.sender_name === 'Customer';
+                                let bubbleClass = '';
+                                if (msg.is_internal) {
+                                    bubbleClass = 'bg-yellow-100 text-yellow-900 border border-yellow-200';
+                                } else if (isCustomer) {
+                                    bubbleClass = 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white border border-slate-200 dark:border-slate-600';
+                                } else {
+                                    bubbleClass = 'bg-indigo-600 text-white';
+                                }
 
-                            <button
-                                type="submit"
-                                className={`btn btn-square shadow-sm h-12 w-12 flex-shrink-0 ${activeTab === 'internal' ? 'btn-warning text-white' : 'btn-primary text-white'}`}
-                                disabled={isSending || !newMessage.trim()}
-                            >
-                                {isSending ? <span className="loading loading-spinner loading-xs"></span> : <Send size={20} />}
-                            </button>
+                                return (
+                                    <div key={msg.id} className={`chat ${isCustomer ? 'chat-start' : 'chat-end'}`}>
+                                        <div className="chat-header text-xs text-[var(--text-muted)] font-bold mb-1 opacity-70">
+                                            {msg.sender_name} • {format(new Date(msg.created_at), 'h:mm a')}
+                                        </div>
+                                        <div className={`chat-bubble shadow-sm font-medium break-words whitespace-pre-wrap max-w-[85%] ${bubbleClass}`}>
+                                            {msg.message_text}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                            <div ref={chatEndRef}></div>
                         </div>
-                    </form>
+
+                        <form onSubmit={sendMessage} className="p-4 bg-[var(--bg-surface)] border-t border-[var(--border-color)]">
+                            <div className="flex gap-2 items-end">
+                                <textarea
+                                    ref={inputRef}
+                                    rows={1}
+                                    placeholder={activeTab === 'internal' ? "Private note..." : "Message..."}
+                                    className={`textarea textarea-bordered w-full resize-none overflow-hidden min-h-[3rem] text-base py-3 leading-normal
+                                    bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] transition-all text-[var(--text-main)]
+                                    ${activeTab === 'internal' ? 'focus:border-yellow-500' : 'focus:border-primary'}`}
+                                    value={newMessage}
+                                    onChange={(e) => setNewMessage(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' && !e.shiftKey) {
+                                            e.preventDefault();
+                                            sendMessage(e);
+                                        }
+                                    }}
+                                    disabled={isSending}
+                                />
+
+                                <button
+                                    type="submit"
+                                    className={`btn btn-square shadow-sm h-12 w-12 flex-shrink-0 ${activeTab === 'internal' ? 'btn-warning text-white' : 'btn-primary text-white'}`}
+                                    disabled={isSending || !newMessage.trim()}
+                                >
+                                    {isSending ? <span className="loading loading-spinner loading-xs"></span> : <Send size={20} />}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
                 </div>
+                {/* END RIGHT COLUMN */}
+
             </div>
+            {/* END MAIN GRID */}
         </div>
     );
 }

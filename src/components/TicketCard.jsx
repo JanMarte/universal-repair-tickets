@@ -6,8 +6,7 @@ import { format } from 'date-fns';
 export default function TicketCard({ ticket }) {
   const navigate = useNavigate();
 
-  // FIX: Added '!' to FORCE override DaisyUI default styles
-  // We use dark text (950) on pastel backgrounds (200) for maximum readability
+  // Color Logic (Dark Text on Pastel Backgrounds)
   const getStatusColor = (status) => {
     switch (status) {
       case 'intake':
@@ -30,10 +29,14 @@ export default function TicketCard({ ticket }) {
   return (
     <div
       onClick={() => navigate(`/ticket/${ticket.id}`)}
-      className="content-card group hover:ring-2 hover:ring-primary/50 cursor-pointer transition-all duration-300 relative overflow-hidden flex flex-col h-full"
+      className="content-card group hover:scale-[1.02] cursor-pointer transition-all duration-300 relative overflow-hidden flex flex-col h-full p-6 pt-8"
     >
-      {/* Hover Highlight Bar */}
-      <div className="absolute left-0 top-0 bottom-0 w-1 bg-transparent group-hover:bg-primary transition-colors"></div>
+      {/* --- THE NEW GRADIENT TOP BORDER --- */}
+      {/* Using the exact same gradient as your 'Create Ticket' button */}
+      <div
+        className="absolute top-0 left-0 right-0 h-2"
+        style={{ background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)' }}
+      ></div>
 
       <div className="flex justify-between items-start mb-3">
         {/* Status Badge */}
