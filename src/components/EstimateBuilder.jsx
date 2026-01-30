@@ -107,7 +107,7 @@ export default function EstimateBuilder({ ticketId, onTotalChange }) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     // TEST MODE: Hardcode YOUR email here until you own a domain
-                    to: 'YOUR_PERSONAL_EMAIL@GMAIL.COM', // <--- CHANGE THIS FOR TESTING
+                    to: 'janmmarte16@gmail.com', // <---CHANGE THIS FOR TESTING
                     subject: `Repair Estimate for Ticket #${ticketId}`,
                     html: emailHtml
                 })
