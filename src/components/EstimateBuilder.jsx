@@ -7,7 +7,12 @@ export default function EstimateBuilder({ ticketId, onTotalChange }) {
     const { addToast } = useToast();
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [estStatus, setEstStatus] = useState('draft'); // draft, sent, approved
+    const [estStatus, setEstStatus] = useState('draft');
+
+    // NEW: We need ticket details for the email
+    const [ticketDetails, setTicketDetails] = useState(null);
+    const [isSending, setIsSending] = useState(false);
+
     const [newItem, setNewItem] = useState({ description: '', quantity: 1, unit_price: '' });
 
     useEffect(() => { fetchItems(); }, [ticketId]);
@@ -20,15 +25,18 @@ export default function EstimateBuilder({ ticketId, onTotalChange }) {
             .eq('ticket_id', ticketId)
             .order('created_at', { ascending: true });
 
-        // 2. Fetch Current Status (Draft/Sent/Approved)
+        // 2. Fetch Ticket Info (Status + Customer Data for Email)
         const { data: ticketData } = await supabase
             .from('tickets')
-            .select('estimate_status')
+            .select('estimate_status, customer_name, brand, model') // <--- Added fields
             .eq('id', ticketId)
             .single();
 
         if (lineItems) setItems(lineItems);
-        if (ticketData) setEstStatus(ticketData.estimate_status || 'draft');
+        if (ticketData) {
+            setEstStatus(ticketData.estimate_status || 'draft');
+            setTicketDetails(ticketData); // Save details for email
+        }
 
         setLoading(false);
         calculateTotal(lineItems || []);
@@ -68,11 +76,62 @@ export default function EstimateBuilder({ ticketId, onTotalChange }) {
         }
     };
 
+    // --- NEW: THE EMAIL SENDER FUNCTION ---
+    const handleSendEstimate = async () => {
+        if (!ticketDetails) return;
+        setIsSending(true);
+
+        const grandTotal = items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0);
+        const estimateLink = `${window.location.origin}/ticket/${ticketId}`;
+
+        // 1. Prepare Email HTML
+        const emailHtml = `
+            <div style="font-family: sans-serif; color: #333; max-width: 600px;">
+                <h2>Estimate Ready for Approval</h2>
+                <p>Hello <strong>${ticketDetails.customer_name}</strong>,</p>
+                <p>We have diagnosed your <strong>${ticketDetails.brand} ${ticketDetails.model}</strong>.</p>
+                <p style="font-size: 18px;">Total Estimate: <strong style="color: #059669;">$${grandTotal.toFixed(2)}</strong></p>
+                <p>Please review the details and approve the repair so we can get started.</p>
+                <br/>
+                <a href="${estimateLink}" style="background-color: #4F46E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold;">View & Approve Estimate</a>
+                <br/><br/>
+                <hr style="border: 0; border-top: 1px solid #eee;" />
+                <p style="font-size: 12px; color: #666;">Universal Vacuum Repair Shop</p>
+            </div>
+        `;
+
+        try {
+            // 2. Call our Vercel Backend
+            const response = await fetch('/api/send-email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    // TEST MODE: Hardcode YOUR email here until you own a domain
+                    to: 'YOUR_PERSONAL_EMAIL@GMAIL.COM', // <--- CHANGE THIS FOR TESTING
+                    subject: `Repair Estimate for Ticket #${ticketId}`,
+                    html: emailHtml
+                })
+            });
+
+            if (!response.ok) throw new Error('Failed to send email');
+
+            // 3. If email succeeds, update status in DB
+            await updateEstimateStatus('sent');
+            addToast('Estimate emailed to customer!', 'success');
+
+        } catch (error) {
+            console.error(error);
+            addToast('Could not send email. Try again.', 'error');
+        } finally {
+            setIsSending(false);
+        }
+    };
+
     const updateEstimateStatus = async (newStatus) => {
         const { error } = await supabase.from('tickets').update({ estimate_status: newStatus }).eq('id', ticketId);
         if (!error) {
             setEstStatus(newStatus);
-            addToast(newStatus === 'sent' ? 'Quote sent to customer!' : 'Status updated', 'success');
+            if (newStatus !== 'sent') addToast('Status updated', 'success');
         }
     };
 
@@ -81,9 +140,9 @@ export default function EstimateBuilder({ ticketId, onTotalChange }) {
     if (loading) return <div className="text-xs opacity-50">Loading...</div>;
 
     return (
-        <div className="bg-[var(--bg-subtle)] rounded-xl border border-[var(--border-color)] overflow-hidden mt-4 shadow-sm">
+        <div className="bg-[var(--bg-subtle)] rounded-xl border border-[var(--border-color)] overflow-hidden mt-4 shadow-sm animate-fade-in-up">
 
-            {/* Header - Spacious */}
+            {/* Header */}
             <div className="bg-[var(--bg-surface)] p-4 border-b border-[var(--border-color)] flex justify-between items-center">
                 <h3 className="font-black text-[var(--text-main)] flex items-center gap-2 text-sm uppercase tracking-wide">
                     <DollarSign size={18} className="text-emerald-500" /> Repair Estimate
@@ -99,7 +158,7 @@ export default function EstimateBuilder({ ticketId, onTotalChange }) {
                 </div>
             </div>
 
-            {/* Items List - Spacious */}
+            {/* Items List */}
             <div className="p-4 space-y-3">
                 {items.map(item => (
                     <div key={item.id} className="flex justify-between items-center bg-[var(--bg-surface)] p-3 rounded-lg border border-[var(--border-color)] shadow-sm">
@@ -111,7 +170,6 @@ export default function EstimateBuilder({ ticketId, onTotalChange }) {
                             <span className="font-mono font-bold text-[var(--text-main)]">
                                 ${(item.quantity * item.unit_price).toFixed(2)}
                             </span>
-                            {/* Only show delete if in Draft mode */}
                             {estStatus === 'draft' && (
                                 <button onClick={() => handleDelete(item.id)} className="text-red-400 hover:text-red-600 transition-colors btn btn-sm btn-ghost btn-circle">
                                     <Trash2 size={16} />
@@ -128,7 +186,7 @@ export default function EstimateBuilder({ ticketId, onTotalChange }) {
                 )}
             </div>
 
-            {/* Add Item Form (Only show if Draft) - Spacious */}
+            {/* Add Item Form (Only show if Draft) */}
             {estStatus === 'draft' ? (
                 <>
                     <div className="p-4 bg-[var(--bg-surface)] border-t border-[var(--border-color)] grid grid-cols-12 gap-3">
@@ -173,8 +231,13 @@ export default function EstimateBuilder({ ticketId, onTotalChange }) {
                     {/* ACTION BAR: Send Quote */}
                     {items.length > 0 && (
                         <div className="p-3 bg-indigo-50 dark:bg-indigo-900/20 border-t border-indigo-100 dark:border-indigo-800 flex justify-end">
-                            <button onClick={() => updateEstimateStatus('sent')} className="btn btn-sm btn-primary gap-2 text-white shadow-lg shadow-indigo-500/30">
-                                <Send size={16} /> Send Quote to Customer
+                            <button
+                                onClick={handleSendEstimate} // <--- CONNECTED THE FUNCTION HERE
+                                disabled={isSending}
+                                className="btn btn-sm btn-primary gap-2 text-white shadow-lg shadow-indigo-500/30"
+                            >
+                                {isSending ? <span className="loading loading-spinner loading-xs"></span> : <Send size={16} />}
+                                {isSending ? 'Sending...' : 'Send Quote to Customer'}
                             </button>
                         </div>
                     )}
