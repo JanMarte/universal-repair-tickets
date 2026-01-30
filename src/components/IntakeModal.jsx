@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, Save, Search, User, Smartphone, FileText, Hash } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { useToast } from '../context/ToastProvider';
@@ -13,6 +13,11 @@ export default function IntakeModal({ isOpen, onClose, onSubmit }) {
 
     // Validation State
     const [errors, setErrors] = useState({});
+    const [isShaking, setIsShaking] = useState(false);
+
+    // Refs for logic (Cooldowns & Timers)
+    const lastToastTime = useRef(0);
+    const shakeTimeout = useRef(null);
 
     // Data for Auto-Complete
     const [catalog, setCatalog] = useState([]);
@@ -30,7 +35,8 @@ export default function IntakeModal({ isOpen, onClose, onSubmit }) {
             setSelectedCustomer(null);
             setNewCustomer({ full_name: '', email: '', phone: '' });
             setDevice({ brand: '', model: '', serial: '', description: '' });
-            setErrors({}); // Clear errors
+            setErrors({});
+            setIsShaking(false);
             fetchCatalog();
         }
     }, [isOpen]);
@@ -97,10 +103,30 @@ export default function IntakeModal({ isOpen, onClose, onSubmit }) {
 
         if (!isValid) {
             setErrors(newErrors);
-            addToast("Please fill in the required fields marked in red.", "error");
 
-            // Remove the shake class after 500ms so it can trigger again on next click
-            setTimeout(() => setErrors(prev => ({ ...prev })), 500);
+            // --- 1. SHAKE LOGIC (Force Restart) ---
+            // Clear any existing timeout
+            if (shakeTimeout.current) clearTimeout(shakeTimeout.current);
+
+            // Turn it OFF instantly
+            setIsShaking(false);
+
+            // Turn it ON after 10ms (Forces React to see a change and restart animation)
+            setTimeout(() => {
+                setIsShaking(true);
+                // Schedule it to turn off automatically after the animation ends (500ms)
+                shakeTimeout.current = setTimeout(() => setIsShaking(false), 500);
+            }, 10);
+
+
+            // --- 2. TOAST LOGIC (Anti-Spam) ---
+            const now = Date.now();
+            // Only show toast if 3 seconds have passed since the last one
+            if (now - lastToastTime.current > 3000) {
+                addToast("Please fill in the required fields marked in red.", "error");
+                lastToastTime.current = now;
+            }
+
             return;
         }
 
@@ -124,6 +150,19 @@ export default function IntakeModal({ isOpen, onClose, onSubmit }) {
         if (errors[field]) {
             setErrors(prev => ({ ...prev, [field]: false }));
         }
+    };
+
+    // Helper Class Logic: 
+    const getErrorClass = (field) => {
+        // If there is an error, show the RED border
+        // AND if isShaking is true, add the animation
+        if (!errors[field]) return '';
+        return `input-error ${isShaking ? 'animate-shake' : ''}`;
+    };
+
+    const getTextAreaErrorClass = (field) => {
+        if (!errors[field]) return '';
+        return `textarea-error ${isShaking ? 'animate-shake' : ''}`;
     };
 
     if (!isOpen) return null;
@@ -158,8 +197,7 @@ export default function IntakeModal({ isOpen, onClose, onSubmit }) {
                                     <input
                                         type="text"
                                         placeholder="Search customer name or phone..."
-                                        // Added error class logic here
-                                        className={`input input-bordered w-full pl-10 font-medium bg-[var(--bg-surface)] text-[var(--text-main)] ${errors.customerSearch ? 'input-error animate-shake' : ''}`}
+                                        className={`input input-bordered w-full pl-10 font-medium bg-[var(--bg-surface)] text-[var(--text-main)] ${getErrorClass('customerSearch')}`}
                                         value={searchTerm}
                                         onChange={(e) => {
                                             setSearchTerm(e.target.value);
@@ -207,7 +245,7 @@ export default function IntakeModal({ isOpen, onClose, onSubmit }) {
                                 <input
                                     type="text"
                                     placeholder="Full Name"
-                                    className={`input input-bordered w-full bg-[var(--bg-surface)] text-[var(--text-main)] ${errors.new_name ? 'input-error animate-shake' : ''}`}
+                                    className={`input input-bordered w-full bg-[var(--bg-surface)] text-[var(--text-main)] ${getErrorClass('new_name')}`}
                                     value={newCustomer.full_name}
                                     onChange={e => {
                                         setNewCustomer({ ...newCustomer, full_name: e.target.value });
@@ -224,7 +262,7 @@ export default function IntakeModal({ isOpen, onClose, onSubmit }) {
                                 <input
                                     type="tel"
                                     placeholder="Phone Number"
-                                    className={`input input-bordered w-full md:col-span-2 bg-[var(--bg-surface)] text-[var(--text-main)] ${errors.new_phone ? 'input-error animate-shake' : ''}`}
+                                    className={`input input-bordered w-full md:col-span-2 bg-[var(--bg-surface)] text-[var(--text-main)] ${getErrorClass('new_phone')}`}
                                     value={newCustomer.phone}
                                     onChange={e => {
                                         setNewCustomer({ ...newCustomer, phone: e.target.value });
@@ -247,8 +285,7 @@ export default function IntakeModal({ isOpen, onClose, onSubmit }) {
                                     type="text"
                                     list="brand-list"
                                     placeholder="Brand (e.g. Dyson)"
-                                    // Added error class logic
-                                    className={`input input-bordered w-full font-bold bg-[var(--bg-surface)] text-[var(--text-main)] ${errors.brand ? 'input-error animate-shake' : ''}`}
+                                    className={`input input-bordered w-full font-bold bg-[var(--bg-surface)] text-[var(--text-main)] ${getErrorClass('brand')}`}
                                     value={device.brand}
                                     onChange={e => {
                                         setDevice({ ...device, brand: e.target.value });
@@ -267,8 +304,7 @@ export default function IntakeModal({ isOpen, onClose, onSubmit }) {
                                     type="text"
                                     list="model-list"
                                     placeholder="Model (e.g. V11 Animal)"
-                                    // Added error class logic
-                                    className={`input input-bordered w-full font-bold bg-[var(--bg-surface)] text-[var(--text-main)] ${errors.model ? 'input-error animate-shake' : ''}`}
+                                    className={`input input-bordered w-full font-bold bg-[var(--bg-surface)] text-[var(--text-main)] ${getErrorClass('model')}`}
                                     value={device.model}
                                     onChange={e => {
                                         setDevice({ ...device, model: e.target.value });
@@ -294,8 +330,7 @@ export default function IntakeModal({ isOpen, onClose, onSubmit }) {
                             </div>
                         </div>
                         <textarea
-                            // Added error class logic
-                            className={`textarea textarea-bordered w-full h-32 text-base leading-relaxed bg-[var(--bg-surface)] text-[var(--text-main)] ${errors.description ? 'textarea-error animate-shake' : ''}`}
+                            className={`textarea textarea-bordered w-full h-32 text-base leading-relaxed bg-[var(--bg-surface)] text-[var(--text-main)] ${getTextAreaErrorClass('description')}`}
                             placeholder="Describe the issue... (e.g. Motor makes loud grinding noise)"
                             value={device.description}
                             onChange={e => {

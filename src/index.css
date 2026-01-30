@@ -3,30 +3,24 @@
 @tailwind utilities;
 
 /* =========================================
-   THEME VARIABLES (High Contrast Update)
+   THEME VARIABLES
    ========================================= */
 :root {
     /* Brand */
     --color-primary: 79 70 229;
     /* Indigo */
 
-    /* Light Mode Colors - UPDATED FOR CONTRAST */
+    /* Light Mode Colors - High Contrast */
     --bg-app: #f0f4f8;
-    /* Slightly darker off-white so cards pop */
     --bg-surface: #ffffff;
-    /* Pure White Cards */
     --bg-subtle: #f1f5f9;
-    /* Light Slate for inputs */
 
     --text-main: #0f172a;
-    /* Slate-900 (Nearly Black) - Was Slate-700 */
     --text-muted: #475569;
-    /* Slate-600 (Darker Grey) - Was Slate-500 */
 
     --border-color: #cbd5e1;
-    /* Slate-300 (Stronger Borders) - Was Slate-200 */
 
-    /* Texture & Glass (Kept Original) */
+    /* Texture & Glass */
     --pattern-color: rgba(148, 163, 184, 0.15);
     --glass-border: 1px solid rgba(255, 255, 255, 0.8);
     --glass-bg: rgba(255, 255, 255, 0.9);
@@ -34,23 +28,17 @@
 }
 
 [data-theme='dark'] {
-    /* Dark Mode Colors - DEEPER BLACKS */
+    /* Dark Mode Colors */
     --bg-app: #020617;
-    /* Slate-950 (Deepest Blue/Black) */
     --bg-surface: #0f172a;
-    /* Slate-900 */
     --bg-subtle: #1e293b;
-    /* Slate-800 */
 
     --text-main: #f8fafc;
-    /* Slate-50 (Pure White) */
     --text-muted: #94a3b8;
-    /* Slate-400 */
 
     --border-color: #1e293b;
-    /* Slate-800 */
 
-    /* Texture & Glass (Kept Original) */
+    /* Texture & Glass */
     --pattern-color: rgba(255, 255, 255, 0.05);
     --glass-border: 1px solid rgba(255, 255, 255, 0.08);
     --glass-bg: rgba(15, 23, 42, 0.85);
@@ -78,7 +66,6 @@ body {
 /* --- DaisyUI Fixes --- */
 .badge {
     border: 1px solid transparent;
-    /* Removes double border visual bug */
 }
 
 /* --- Modal Components --- */
@@ -117,12 +104,10 @@ body {
 }
 
 /* --- Form Elements --- */
-/* Forced colors to respect Light/Dark mode variables */
 input,
 select,
 textarea {
     background-color: var(--bg-subtle);
-    /* Changed from surface to subtle for contrast */
     color: var(--text-main);
     border: 1px solid var(--border-color);
     @apply transition-colors duration-200 rounded-lg px-4 py-3 text-base;
@@ -138,7 +123,6 @@ select:focus,
 textarea:focus {
     outline: none;
     background-color: var(--bg-surface);
-    /* Pop to white/dark on focus */
     border-color: rgb(var(--color-primary));
     @apply ring-4 ring-indigo-500/10;
 }
@@ -226,24 +210,39 @@ textarea:focus {
     }
 }
 
+/* CRITICAL: This class must exist for the React code to work */
 .animate-shake {
     animation: shake 0.3s ease-in-out;
 }
 
-/* ERROR STATE OVERRIDES */
-/* Force red border and light red background when validation fails */
+/* =========================================
+   CRITICAL OVERRIDES (Add this at the bottom)
+   ========================================= */
+
+/* 1. Force Red Border on Error (Overrides Global Input Styles) */
 .input-error,
 .textarea-error {
     border-color: #ef4444 !important;
     /* Red-500 */
     background-color: #fef2f2 !important;
     /* Red-50 */
+    color: #991b1b !important;
+    /* Red-800 */
 }
 
-/* Make sure it looks okay in dark mode too */
+/* 2. Fix Dark Mode Errors */
 [data-theme='dark'] .input-error,
 [data-theme='dark'] .textarea-error {
     border-color: #ef4444 !important;
     background-color: #450a0a !important;
     /* Red-950 */
+    color: #fecaca !important;
+    /* Red-200 */
+}
+
+/* 3. Fix Placeholder Color in Error State */
+.input-error::placeholder,
+.textarea-error::placeholder {
+    color: #fca5a5 !important;
+    /* Red-300 */
 }
