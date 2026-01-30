@@ -11,24 +11,26 @@ export default function IntakeModal({ isOpen, onClose, onSubmit }) {
     const [searchResults, setSearchResults] = useState([]);
     const [selectedCustomer, setSelectedCustomer] = useState(null);
 
+    // Validation State
+    const [errors, setErrors] = useState({});
+
     // Data for Auto-Complete
-    const [catalog, setCatalog] = useState([]); // All data
-    const [uniqueBrands, setUniqueBrands] = useState([]); // Just ['Dyson', 'Shark'...]
-    const [filteredModels, setFilteredModels] = useState([]); // Models for selected brand
+    const [catalog, setCatalog] = useState([]);
+    const [uniqueBrands, setUniqueBrands] = useState([]);
+    const [filteredModels, setFilteredModels] = useState([]);
 
     const [newCustomer, setNewCustomer] = useState({ full_name: '', email: '', phone: '' });
     const [device, setDevice] = useState({ brand: '', model: '', serial: '', description: '' });
 
     useEffect(() => {
         if (isOpen) {
-            // Reset forms
+            // Reset Everything
             setSearchTerm('');
             setSearchResults([]);
             setSelectedCustomer(null);
             setNewCustomer({ full_name: '', email: '', phone: '' });
             setDevice({ brand: '', model: '', serial: '', description: '' });
-
-            // Fetch the Catalog for auto-complete
+            setErrors({}); // Clear errors
             fetchCatalog();
         }
     }, [isOpen]);
@@ -37,16 +39,13 @@ export default function IntakeModal({ isOpen, onClose, onSubmit }) {
         const { data } = await supabase.from('device_catalog').select('*');
         if (data) {
             setCatalog(data);
-            // Extract unique brands
             const brands = [...new Set(data.map(item => item.brand))].sort();
             setUniqueBrands(brands);
         }
     }
 
-    // When Brand Changes -> Filter the Model List
     useEffect(() => {
         if (device.brand) {
-            // Find models that match the typed brand (case insensitive)
             const models = catalog
                 .filter(item => item.brand.toLowerCase() === device.brand.toLowerCase())
                 .map(item => item.model)
@@ -57,7 +56,6 @@ export default function IntakeModal({ isOpen, onClose, onSubmit }) {
         }
     }, [device.brand, catalog]);
 
-    // Customer Search Logic
     useEffect(() => {
         const delayDebounceFn = setTimeout(async () => {
             if (searchTerm.length > 2) {
@@ -76,15 +74,37 @@ export default function IntakeModal({ isOpen, onClose, onSubmit }) {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (activeTab === 'existing' && !selectedCustomer) {
-            addToast("Please select a customer", "error");
-            return;
+
+        // --- VALIDATION LOGIC ---
+        const newErrors = {};
+        let isValid = true;
+
+        // 1. Validate Customer Section
+        if (activeTab === 'existing') {
+            if (!selectedCustomer) {
+                newErrors.customerSearch = true;
+                isValid = false;
+            }
+        } else {
+            if (!newCustomer.full_name) { newErrors.new_name = true; isValid = false; }
+            if (!newCustomer.phone) { newErrors.new_phone = true; isValid = false; }
         }
-        if (!device.brand || !device.model || !device.description) {
-            addToast("Please fill in device details", "error");
+
+        // 2. Validate Device Section
+        if (!device.brand) { newErrors.brand = true; isValid = false; }
+        if (!device.model) { newErrors.model = true; isValid = false; }
+        if (!device.description) { newErrors.description = true; isValid = false; }
+
+        if (!isValid) {
+            setErrors(newErrors);
+            addToast("Please fill in the required fields marked in red.", "error");
+
+            // Remove the shake class after 500ms so it can trigger again on next click
+            setTimeout(() => setErrors(prev => ({ ...prev })), 500);
             return;
         }
 
+        // --- SUBMISSION ---
         const formData = {
             customer_id: activeTab === 'existing' ? selectedCustomer.id : null,
             full_name: activeTab === 'existing' ? selectedCustomer.full_name : newCustomer.full_name,
@@ -97,6 +117,13 @@ export default function IntakeModal({ isOpen, onClose, onSubmit }) {
         };
         onSubmit(formData);
         onClose();
+    };
+
+    // Helper to clear errors when user types
+    const clearError = (field) => {
+        if (errors[field]) {
+            setErrors(prev => ({ ...prev, [field]: false }));
+        }
     };
 
     if (!isOpen) return null;
@@ -120,8 +147,8 @@ export default function IntakeModal({ isOpen, onClose, onSubmit }) {
                     {/* SECTION 1: CUSTOMER */}
                     <div>
                         <div className="tabs tabs-boxed bg-[var(--bg-subtle)] p-1 mb-4 rounded-xl border border-[var(--border-color)]">
-                            <a className={`tab flex-1 rounded-lg font-bold transition-all ${activeTab === 'existing' ? 'bg-[var(--bg-surface)] shadow-sm text-primary' : 'text-[var(--text-muted)]'}`} onClick={() => setActiveTab('existing')}>Existing Customer</a>
-                            <a className={`tab flex-1 rounded-lg font-bold transition-all ${activeTab === 'new' ? 'bg-[var(--bg-surface)] shadow-sm text-primary' : 'text-[var(--text-muted)]'}`} onClick={() => setActiveTab('new')}>New Customer</a>
+                            <a className={`tab flex-1 rounded-lg font-bold transition-all ${activeTab === 'existing' ? 'bg-[var(--bg-surface)] shadow-sm text-primary' : 'text-[var(--text-muted)]'}`} onClick={() => { setActiveTab('existing'); setErrors({}); }}>Existing Customer</a>
+                            <a className={`tab flex-1 rounded-lg font-bold transition-all ${activeTab === 'new' ? 'bg-[var(--bg-surface)] shadow-sm text-primary' : 'text-[var(--text-muted)]'}`} onClick={() => { setActiveTab('new'); setErrors({}); }}>New Customer</a>
                         </div>
 
                         {activeTab === 'existing' ? (
@@ -131,12 +158,15 @@ export default function IntakeModal({ isOpen, onClose, onSubmit }) {
                                     <input
                                         type="text"
                                         placeholder="Search customer name or phone..."
-                                        className="input input-bordered w-full pl-10 font-medium bg-[var(--bg-surface)] text-[var(--text-main)]"
+                                        // Added error class logic here
+                                        className={`input input-bordered w-full pl-10 font-medium bg-[var(--bg-surface)] text-[var(--text-main)] ${errors.customerSearch ? 'input-error animate-shake' : ''}`}
                                         value={searchTerm}
-                                        onChange={(e) => setSearchTerm(e.target.value)}
+                                        onChange={(e) => {
+                                            setSearchTerm(e.target.value);
+                                            clearError('customerSearch');
+                                        }}
                                     />
                                 </div>
-                                {/* Dropdown Logic (Hidden for brevity, assumes standard implementation) */}
                                 {searchResults.length > 0 && !selectedCustomer && (
                                     <ul className="absolute z-10 w-full mt-1 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl shadow-xl max-h-48 overflow-y-auto">
                                         {searchResults.map(customer => {
@@ -150,6 +180,7 @@ export default function IntakeModal({ isOpen, onClose, onSubmit }) {
                                                         setSelectedCustomer(customer);
                                                         setSearchTerm(customer.full_name);
                                                         setSearchResults([]);
+                                                        clearError('customerSearch');
                                                     }}
                                                 >
                                                     <div className="flex flex-col">
@@ -173,29 +204,56 @@ export default function IntakeModal({ isOpen, onClose, onSubmit }) {
                             </div>
                         ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <input type="text" placeholder="Full Name" className="input input-bordered w-full bg-[var(--bg-surface)] text-[var(--text-main)]" value={newCustomer.full_name} onChange={e => setNewCustomer({ ...newCustomer, full_name: e.target.value })} />
-                                <input type="email" placeholder="Email (Optional)" className="input input-bordered w-full bg-[var(--bg-surface)] text-[var(--text-main)]" value={newCustomer.email} onChange={e => setNewCustomer({ ...newCustomer, email: e.target.value })} />
-                                <input type="tel" placeholder="Phone Number" className="input input-bordered w-full md:col-span-2 bg-[var(--bg-surface)] text-[var(--text-main)]" value={newCustomer.phone} onChange={e => setNewCustomer({ ...newCustomer, phone: e.target.value })} />
+                                <input
+                                    type="text"
+                                    placeholder="Full Name"
+                                    className={`input input-bordered w-full bg-[var(--bg-surface)] text-[var(--text-main)] ${errors.new_name ? 'input-error animate-shake' : ''}`}
+                                    value={newCustomer.full_name}
+                                    onChange={e => {
+                                        setNewCustomer({ ...newCustomer, full_name: e.target.value });
+                                        clearError('new_name');
+                                    }}
+                                />
+                                <input
+                                    type="email"
+                                    placeholder="Email (Optional)"
+                                    className="input input-bordered w-full bg-[var(--bg-surface)] text-[var(--text-main)]"
+                                    value={newCustomer.email}
+                                    onChange={e => setNewCustomer({ ...newCustomer, email: e.target.value })}
+                                />
+                                <input
+                                    type="tel"
+                                    placeholder="Phone Number"
+                                    className={`input input-bordered w-full md:col-span-2 bg-[var(--bg-surface)] text-[var(--text-main)] ${errors.new_phone ? 'input-error animate-shake' : ''}`}
+                                    value={newCustomer.phone}
+                                    onChange={e => {
+                                        setNewCustomer({ ...newCustomer, phone: e.target.value });
+                                        clearError('new_phone');
+                                    }}
+                                />
                             </div>
                         )}
                     </div>
 
-                    {/* SECTION 2: DEVICE INFO (UPDATED WITH DATALISTS) */}
+                    {/* SECTION 2: DEVICE INFO */}
                     <div>
                         <h3 className="text-xs font-bold uppercase text-[var(--text-muted)] tracking-wider mb-3 flex items-center gap-2">
                             <Smartphone size={16} /> Device Information
                         </h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
 
-                            {/* BRAND INPUT WITH DATALIST */}
                             <div className="form-control">
                                 <input
                                     type="text"
                                     list="brand-list"
                                     placeholder="Brand (e.g. Dyson)"
-                                    className="input input-bordered w-full font-bold bg-[var(--bg-surface)] text-[var(--text-main)]"
+                                    // Added error class logic
+                                    className={`input input-bordered w-full font-bold bg-[var(--bg-surface)] text-[var(--text-main)] ${errors.brand ? 'input-error animate-shake' : ''}`}
                                     value={device.brand}
-                                    onChange={e => setDevice({ ...device, brand: e.target.value })}
+                                    onChange={e => {
+                                        setDevice({ ...device, brand: e.target.value });
+                                        clearError('brand');
+                                    }}
                                 />
                                 <datalist id="brand-list">
                                     {uniqueBrands.map(brand => (
@@ -204,15 +262,18 @@ export default function IntakeModal({ isOpen, onClose, onSubmit }) {
                                 </datalist>
                             </div>
 
-                            {/* MODEL INPUT WITH SMART DATALIST */}
                             <div className="form-control">
                                 <input
                                     type="text"
                                     list="model-list"
                                     placeholder="Model (e.g. V11 Animal)"
-                                    className="input input-bordered w-full font-bold bg-[var(--bg-surface)] text-[var(--text-main)]"
+                                    // Added error class logic
+                                    className={`input input-bordered w-full font-bold bg-[var(--bg-surface)] text-[var(--text-main)] ${errors.model ? 'input-error animate-shake' : ''}`}
                                     value={device.model}
-                                    onChange={e => setDevice({ ...device, model: e.target.value })}
+                                    onChange={e => {
+                                        setDevice({ ...device, model: e.target.value });
+                                        clearError('model');
+                                    }}
                                 />
                                 <datalist id="model-list">
                                     {filteredModels.map(model => (
@@ -233,10 +294,14 @@ export default function IntakeModal({ isOpen, onClose, onSubmit }) {
                             </div>
                         </div>
                         <textarea
-                            className="textarea textarea-bordered w-full h-32 text-base leading-relaxed bg-[var(--bg-surface)] text-[var(--text-main)]"
+                            // Added error class logic
+                            className={`textarea textarea-bordered w-full h-32 text-base leading-relaxed bg-[var(--bg-surface)] text-[var(--text-main)] ${errors.description ? 'textarea-error animate-shake' : ''}`}
                             placeholder="Describe the issue... (e.g. Motor makes loud grinding noise)"
                             value={device.description}
-                            onChange={e => setDevice({ ...device, description: e.target.value })}
+                            onChange={e => {
+                                setDevice({ ...device, description: e.target.value });
+                                clearError('description');
+                            }}
                         ></textarea>
                     </div>
                 </div>
@@ -244,7 +309,7 @@ export default function IntakeModal({ isOpen, onClose, onSubmit }) {
                 {/* Footer */}
                 <div className="p-5 border-t border-[var(--border-color)] bg-[var(--bg-subtle)] flex justify-end gap-3">
                     <button onClick={onClose} className="btn btn-ghost text-[var(--text-muted)] hover:bg-slate-200 dark:hover:bg-slate-700">Cancel</button>
-                    <button onClick={handleSubmit} className="btn btn-primary px-8 shadow-lg text-white font-bold tracking-wide">
+                    <button onClick={handleSubmit} className="btn btn-gradient px-8 shadow-lg text-white font-bold tracking-wide">
                         <Save size={18} /> Create Ticket
                     </button>
                 </div>

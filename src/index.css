@@ -229,3 +229,21 @@ textarea:focus {
 .animate-shake {
     animation: shake 0.3s ease-in-out;
 }
+
+/* ERROR STATE OVERRIDES */
+/* Force red border and light red background when validation fails */
+.input-error,
+.textarea-error {
+    border-color: #ef4444 !important;
+    /* Red-500 */
+    background-color: #fef2f2 !important;
+    /* Red-50 */
+}
+
+/* Make sure it looks okay in dark mode too */
+[data-theme='dark'] .input-error,
+[data-theme='dark'] .textarea-error {
+    border-color: #ef4444 !important;
+    background-color: #450a0a !important;
+    /* Red-950 */
+}
