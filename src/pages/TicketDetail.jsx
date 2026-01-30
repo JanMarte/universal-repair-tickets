@@ -184,11 +184,12 @@ export default function TicketDetail() {
                     </div>
                 </div>
                 <div className="flex gap-3 items-center">
-                    {/* PRINT LABEL BUTTON (Simple Pop-up) */}
+                    {/* PRINT LABEL BUTTON (Fixed Alignment) */}
                     {isStaff && (
                         <button
                             onClick={() => window.open(`/print/${id}`, '_blank', 'width=400,height=600')}
-                            className="btn btn-circle btn-ghost hover:bg-[var(--bg-subtle)] text-[var(--text-main)] tooltip tooltip-bottom"
+                            // FIX: Added 'grid place-items-center' and removed any conflicting padding
+                            className="btn btn-circle btn-ghost grid place-items-center hover:bg-[var(--bg-subtle)] text-[var(--text-main)] tooltip tooltip-bottom"
                             data-tip="Print Label"
                         >
                             <Printer size={20} />
