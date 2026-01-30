@@ -3,30 +3,30 @@
 @tailwind utilities;
 
 /* =========================================
-   THEME VARIABLES
+   THEME VARIABLES (High Contrast Update)
    ========================================= */
 :root {
     /* Brand */
     --color-primary: 79 70 229;
     /* Indigo */
 
-    /* Light Mode Colors */
-    --bg-app: #f8fafc;
-    /* Main Background (Slate-50) */
+    /* Light Mode Colors - UPDATED FOR CONTRAST */
+    --bg-app: #f0f4f8;
+    /* Slightly darker off-white so cards pop */
     --bg-surface: #ffffff;
-    /* Cards/Modals (White) */
+    /* Pure White Cards */
     --bg-subtle: #f1f5f9;
-    /* Sidebar/Form Canvas (Slate-100) */
+    /* Light Slate for inputs */
 
-    --text-main: #334155;
-    /* Main Text (Slate-700) */
-    --text-muted: #64748b;
-    /* Muted Text (Slate-500) */
+    --text-main: #0f172a;
+    /* Slate-900 (Nearly Black) - Was Slate-700 */
+    --text-muted: #475569;
+    /* Slate-600 (Darker Grey) - Was Slate-500 */
 
-    --border-color: #e2e8f0;
-    /* Borders (Slate-200) */
+    --border-color: #cbd5e1;
+    /* Slate-300 (Stronger Borders) - Was Slate-200 */
 
-    /* Texture & Glass */
+    /* Texture & Glass (Kept Original) */
     --pattern-color: rgba(148, 163, 184, 0.15);
     --glass-border: 1px solid rgba(255, 255, 255, 0.8);
     --glass-bg: rgba(255, 255, 255, 0.9);
@@ -34,23 +34,23 @@
 }
 
 [data-theme='dark'] {
-    /* Dark Mode Colors */
-    --bg-app: #0f172a;
+    /* Dark Mode Colors - DEEPER BLACKS */
+    --bg-app: #020617;
+    /* Slate-950 (Deepest Blue/Black) */
+    --bg-surface: #0f172a;
     /* Slate-900 */
-    --bg-surface: #1e293b;
+    --bg-subtle: #1e293b;
     /* Slate-800 */
-    --bg-subtle: rgba(30, 41, 59, 0.5);
-    /* Semi-transparent Slate */
 
-    --text-main: #f1f5f9;
-    /* Slate-100 */
+    --text-main: #f8fafc;
+    /* Slate-50 (Pure White) */
     --text-muted: #94a3b8;
     /* Slate-400 */
 
-    --border-color: #475569;
-    /* Slate-600 */
+    --border-color: #1e293b;
+    /* Slate-800 */
 
-    /* Texture & Glass */
+    /* Texture & Glass (Kept Original) */
     --pattern-color: rgba(255, 255, 255, 0.05);
     --glass-border: 1px solid rgba(255, 255, 255, 0.08);
     --glass-bg: rgba(15, 23, 42, 0.85);
@@ -74,6 +74,12 @@ body {
 /* =========================================
    UTILITY & COMPONENT CLASSES
    ========================================= */
+
+/* --- DaisyUI Fixes --- */
+.badge {
+    border: 1px solid transparent;
+    /* Removes double border visual bug */
+}
 
 /* --- Modal Components --- */
 .modal-backdrop {
@@ -110,18 +116,18 @@ body {
     border-color: var(--border-color);
 }
 
-/* --- Form Elements (UPDATED FOR SPACE) --- */
+/* --- Form Elements --- */
+/* Forced colors to respect Light/Dark mode variables */
 input,
 select,
 textarea {
-    background-color: var(--bg-surface);
+    background-color: var(--bg-subtle);
+    /* Changed from surface to subtle for contrast */
     color: var(--text-main);
     border: 1px solid var(--border-color);
-    /* ADDED: px-4 (padding left/right) and py-3 (padding top/bottom) */
     @apply transition-colors duration-200 rounded-lg px-4 py-3 text-base;
 }
 
-/* Ensure Select dropdowns specifically have enough room on the right for the arrow */
 select {
     background-position: right 1rem center;
     padding-right: 2.5rem;
@@ -131,6 +137,8 @@ input:focus,
 select:focus,
 textarea:focus {
     outline: none;
+    background-color: var(--bg-surface);
+    /* Pop to white/dark on focus */
     border-color: rgb(var(--color-primary));
     @apply ring-4 ring-indigo-500/10;
 }

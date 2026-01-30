@@ -2,16 +2,27 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
 import { ToastProvider } from './context/ToastProvider';
+
+// COMPONENTS
+import AutoLogout from './components/AutoLogout'; // <--- Added Security
+
+// PAGES
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import TicketDetail from './pages/TicketDetail';
 import CustomerHistory from './pages/CustomerHistory';
 import MyTickets from './pages/MyTickets';
+import Team from './pages/Team'; // <--- Added Team Page
 
 function App() {
   const [session, setSession] = useState(null);
   const [role, setRole] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  // Helper to check if user works here (Employee, Manager, or Admin)
+  const isStaff = ['employee', 'manager', 'admin'].includes(role);
+  // Helper to check if user is management
+  const isManagement = ['manager', 'admin'].includes(role);
 
   const fetchRole = async (userId) => {
     const { data: profile } = await supabase
@@ -19,7 +30,7 @@ function App() {
       .select('role')
       .eq('id', userId)
       .maybeSingle();
-    
+
     setRole(profile?.role || 'customer');
     setLoading(false);
   };
@@ -60,37 +71,51 @@ function App() {
   return (
     <ToastProvider>
       <BrowserRouter>
+        {/* Security Guard: Watches for inactivity */}
+        {session && <AutoLogout />}
+
         <Routes>
           <Route path="/login" element={!session ? <Login /> : <Navigate to="/" />} />
-          
-          <Route 
-              path="/" 
-              element={
-                !session ? <Navigate to="/login" /> : 
-                role === 'employee' ? <Navigate to="/dashboard" /> : 
-                <Navigate to="/my-tickets" />
-              } 
+
+          {/* ROOT REDIRECT LOGIC */}
+          <Route
+            path="/"
+            element={
+              !session ? <Navigate to="/login" /> :
+                isStaff ? <Navigate to="/dashboard" /> : // Any staff goes to dashboard
+                  <Navigate to="/my-tickets" /> // Customers go to my-tickets
+            }
           />
 
-          <Route 
-              path="/dashboard" 
-              element={session && role === 'employee' ? <Dashboard /> : <Navigate to="/" />} 
-          />
-          
-          <Route 
-              path="/my-tickets" 
-              element={session && role !== 'employee' ? <MyTickets /> : <Navigate to="/" />} 
+          {/* DASHBOARD - Allowed for Employee, Manager, Admin */}
+          <Route
+            path="/dashboard"
+            element={session && isStaff ? <Dashboard /> : <Navigate to="/" />}
           />
 
-          <Route 
-              path="/ticket/:id" 
-              element={session ? <TicketDetail /> : <Navigate to="/login" />} 
+          {/* MY TICKETS - Only for Customers */}
+          <Route
+            path="/my-tickets"
+            element={session && !isStaff ? <MyTickets /> : <Navigate to="/" />}
           />
-          
-          <Route 
-              path="/customer/:id" 
-              element={session && role === 'employee' ? <CustomerHistory /> : <Navigate to="/" />} 
-          /> 
+
+          {/* TICKET DETAIL - Accessible by everyone (internally filters view) */}
+          <Route
+            path="/ticket/:id"
+            element={session ? <TicketDetail /> : <Navigate to="/login" />}
+          />
+
+          {/* CUSTOMER HISTORY - Staff Only */}
+          <Route
+            path="/customer/:id"
+            element={session && isStaff ? <CustomerHistory /> : <Navigate to="/" />}
+          />
+
+          {/* TEAM MANAGEMENT - Managers & Admins Only */}
+          <Route
+            path="/team"
+            element={session && isManagement ? <Team /> : <Navigate to="/" />}
+          />
         </Routes>
       </BrowserRouter>
     </ToastProvider>

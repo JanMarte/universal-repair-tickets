@@ -17,7 +17,7 @@ export default function Login() {
     const handleAuth = async (e) => {
         e.preventDefault();
         if (loading) return;
-        
+
         // SECURITY CHECK: Ensure Captcha is completed
         if (!captchaToken) {
             addToast("Please complete the security check.", "error");
@@ -33,7 +33,7 @@ export default function Login() {
                     password,
                     options: {
                         data: { full_name: fullName },
-                        captchaToken: captchaToken 
+                        captchaToken: captchaToken
                     }
                 });
                 if (error) throw error;
@@ -43,7 +43,7 @@ export default function Login() {
                     email,
                     password,
                     options: {
-                        captchaToken: captchaToken 
+                        captchaToken: captchaToken
                     }
                 });
                 if (error) throw error;
@@ -51,7 +51,7 @@ export default function Login() {
             }
         } catch (error) {
             addToast(error.message, "error");
-            setCaptchaToken(null); 
+            setCaptchaToken(null);
         } finally {
             setLoading(false);
         }
@@ -60,7 +60,7 @@ export default function Login() {
     return (
         <div className="min-h-screen flex items-center justify-center p-4 transition-colors duration-300">
             <div className="w-full max-w-sm rounded-2xl shadow-2xl animate-pop overflow-hidden relative bg-[var(--bg-surface)] border border-[var(--border-color)]">
-                
+
                 <div className="h-1.5 w-full bg-gradient-to-r from-indigo-500 to-purple-500 absolute top-0 left-0"></div>
 
                 <div className="p-8">
@@ -132,7 +132,7 @@ export default function Login() {
 
                         {/* --- ADDED TURNSTILE HERE --- */}
                         <div className="flex justify-center my-2 w-full overflow-hidden">
-                             <Turnstile 
+                            <Turnstile
                                 siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY}
                                 onSuccess={(token) => setCaptchaToken(token)}
                                 options={{ theme: 'auto', size: 'flexible' }}

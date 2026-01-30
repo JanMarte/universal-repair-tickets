@@ -1,57 +1,81 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Clock, AlertTriangle, Hash } from 'lucide-react';
 import { format } from 'date-fns';
 
 export default function TicketCard({ ticket }) {
   const navigate = useNavigate();
 
+  // FIX: Added '!' to FORCE override DaisyUI default styles
+  // We use dark text (950) on pastel backgrounds (200) for maximum readability
   const getStatusColor = (status) => {
     switch (status) {
-      case 'completed': return 'badge-success text-white';
-      case 'ready_pickup': return 'badge-info text-white';
-      case 'diagnosing': return 'badge-warning text-white';
-      case 'repairing': return 'badge-secondary text-white';
-      default: return 'badge-ghost';
+      case 'intake':
+        return '!bg-sky-200 !text-sky-950 dark:!bg-sky-900/40 dark:!text-sky-200';
+      case 'diagnosing':
+        return '!bg-purple-200 !text-purple-950 dark:!bg-purple-900/40 dark:!text-purple-200';
+      case 'waiting_parts':
+        return '!bg-orange-200 !text-orange-950 dark:!bg-orange-900/40 dark:!text-orange-200';
+      case 'repairing':
+        return '!bg-yellow-200 !text-yellow-950 dark:!bg-yellow-900/40 dark:!text-yellow-200';
+      case 'ready_pickup':
+        return '!bg-emerald-200 !text-emerald-950 dark:!bg-emerald-900/40 dark:!text-emerald-200';
+      case 'completed':
+        return '!bg-slate-200 !text-slate-800 dark:!bg-slate-800 dark:!text-slate-300';
+      default:
+        return '!bg-gray-200 !text-gray-900';
     }
   };
 
   return (
-    <div 
-      // 1. Removed 'card' class to stop DaisyUI from forcing dark colors
-      // 2. Used 'bg-[var(--bg-surface)]' to strictly follow your theme variables
-      className="flex flex-col bg-[var(--bg-surface)] shadow-sm hover:shadow-xl card-hover-effect border border-slate-200 dark:border-slate-700 rounded-2xl cursor-pointer overflow-hidden group transition-all duration-300"
+    <div
       onClick={() => navigate(`/ticket/${ticket.id}`)}
+      className="content-card group hover:ring-2 hover:ring-primary/50 cursor-pointer transition-all duration-300 relative overflow-hidden flex flex-col h-full"
     >
-      {/* Status Stripe */}
-      <div className={`h-1.5 w-full ${ticket.is_backordered ? 'bg-error' : 'bg-gradient-to-r from-indigo-400 to-purple-400'}`}></div>
-      
-      <div className="p-5 flex-1 flex flex-col">
-        <div className="flex justify-between items-start">
-            <div>
-                {/* Text matches your theme variables */}
-                <h3 className="text-lg font-bold text-[var(--text-main)]">
-                    {ticket.brand} <span className="font-normal text-slate-400 dark:text-slate-500 text-base">{ticket.model}</span>
-                </h3>
-                <p className="text-sm text-slate-500 dark:text-slate-400 font-medium mt-1">{ticket.customer_name}</p>
-            </div>
-            {ticket.is_backordered && (
-                <div className="badge badge-error gap-1 text-white font-bold shadow-sm animate-pulse">
-                    BO
-                </div>
-            )}
+      {/* Hover Highlight Bar */}
+      <div className="absolute left-0 top-0 bottom-0 w-1 bg-transparent group-hover:bg-primary transition-colors"></div>
+
+      <div className="flex justify-between items-start mb-3">
+        {/* Status Badge */}
+        <div className={`badge font-black uppercase text-[10px] tracking-wider py-3 border-none ${getStatusColor(ticket.status)}`}>
+          {ticket.status.replace('_', ' ')}
         </div>
 
-        {/* Description Box */}
-        <p className="text-slate-500 dark:text-slate-300 text-sm line-clamp-2 mt-4 bg-slate-50 dark:bg-slate-700/50 p-3 rounded-lg border border-slate-100 dark:border-slate-600 italic group-hover:bg-indigo-50/50 dark:group-hover:bg-slate-700 transition-colors">
-            "{ticket.description}"
+        {/* Ticket ID */}
+        <span className="text-xs font-mono font-bold text-[var(--text-muted)]">
+          #{ticket.id}
+        </span>
+      </div>
+
+      <h3 className="text-lg font-black text-[var(--text-main)] mb-1 leading-tight group-hover:text-primary transition-colors">
+        {ticket.brand} {ticket.model}
+      </h3>
+
+      {/* SERIAL NUMBER BADGE */}
+      {ticket.serial_number && (
+        <div className="flex items-center gap-1 text-xs font-mono text-[var(--text-muted)] mb-3 opacity-80">
+          <Hash size={12} /> {ticket.serial_number}
+        </div>
+      )}
+
+      {/* DESCRIPTION BOX */}
+      <div className="bg-[var(--bg-subtle)] p-3 rounded-xl mb-4">
+        <p className="text-sm text-[var(--text-muted)] font-medium line-clamp-2 leading-relaxed">
+          {ticket.description}
         </p>
+      </div>
 
-        <div className="flex justify-between items-center mt-5 pt-4 border-t border-slate-100 dark:border-slate-700">
-            <span className="text-xs font-mono font-bold text-slate-400 dark:text-slate-500">#{ticket.id} • {format(new Date(ticket.created_at), 'MMM d')}</span>
-            <div className={`badge ${getStatusColor(ticket.status)} font-bold uppercase text-[10px] p-3 tracking-wide shadow-sm`}>
-                {ticket.status.replace('_', ' ')}
-            </div>
+      <div className="border-t border-[var(--border-color)] pt-3 flex justify-between items-center mt-auto">
+        <div className="flex items-center gap-2 text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">
+          <Clock size={14} />
+          {format(new Date(ticket.created_at), 'MMM d')}
         </div>
+
+        {ticket.is_backordered && (
+          <div className="tooltip tooltip-left" data-tip="Waiting on Parts">
+            <AlertTriangle size={18} className="text-red-500 animate-pulse" />
+          </div>
+        )}
       </div>
     </div>
   );
