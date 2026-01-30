@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import TicketCard from '../components/TicketCard';
 import IntakeModal from '../components/IntakeModal';
 import { useNavigate } from 'react-router-dom';
-import { Search, Filter, Moon, Sun, Plus, XCircle, LogOut, Users } from 'lucide-react'; // Added Users icon
+import { Search, Filter, Moon, Sun, Plus, XCircle, LogOut, Users, QrCode } from 'lucide-react'; // Added QrCode
 import { useToast } from '../context/ToastProvider';
+import QRScanner from '../components/QRScanner'; // Import the scanner
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -17,10 +18,10 @@ export default function Dashboard() {
 
   const [currentUser, setCurrentUser] = useState({ email: '', role: '', initial: '?' });
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [statusFilter, setStatusFilter] = useState('ALL')
+  const [isScanning, setIsScanning] = useState(false); // State is correct
 
   useEffect(() => {
-    // 1. Sync Theme on Load
     document.documentElement.setAttribute('data-theme', theme);
     if (theme === 'dark') document.documentElement.classList.add('dark');
     else document.documentElement.classList.remove('dark');
@@ -43,7 +44,6 @@ export default function Dashboard() {
 
   async function fetchTickets() {
     setLoading(true);
-    // RLS policies now handle who sees what, so we just ask for tickets
     const { data, error } = await supabase.from('tickets').select('*').order('created_at', { ascending: false });
     if (error) console.error('Error fetching tickets:', error);
     else setTickets(data);
@@ -56,7 +56,6 @@ export default function Dashboard() {
     navigate('/login');
   };
 
-  // Helper to check for Manager/Admin
   const isManagement = ['manager', 'admin'].includes(currentUser.role);
 
   const filteredTickets = tickets.filter(ticket => {
@@ -67,7 +66,7 @@ export default function Dashboard() {
       (ticket.phone || '').includes(searchLower) ||
       (ticket.brand || '').toLowerCase().includes(searchLower) ||
       (ticket.model || '').toLowerCase().includes(searchLower) ||
-      (ticket.serial_number || '').toLowerCase().includes(searchLower); // Added Serial Search
+      (ticket.serial_number || '').toLowerCase().includes(searchLower);
     const matchesStatus = statusFilter === 'ALL' || ticket.status === statusFilter;
     if (statusFilter === 'BACKORDER') return matchesSearch && ticket.is_backordered;
     return matchesSearch && matchesStatus;
@@ -76,7 +75,6 @@ export default function Dashboard() {
   const handleCreateTicket = async (formData) => {
     let customerId = formData.customer_id;
 
-    // 1. If it's a NEW customer, create them first
     if (!customerId) {
       const { data: newCust, error: custError } = await supabase
         .from('customers')
@@ -95,7 +93,6 @@ export default function Dashboard() {
       customerId = newCust.id;
     }
 
-    // 2. Create the Ticket
     const { error } = await supabase.from('tickets').insert([{
       customer_id: customerId,
       customer_name: formData.full_name,
@@ -138,7 +135,19 @@ export default function Dashboard() {
           <span className="md:hidden font-black text-[var(--text-main)] text-lg">VRS</span>
         </div>
 
-        <div className="flex-none flex items-center gap-5">
+        <div className="flex-none flex items-center gap-3 md:gap-5">
+
+          {/* --- 1. NEW SCANNER BUTTON --- */}
+          {/* I added this button specifically for mobile and desktop */}
+          <button
+            className="btn btn-circle btn-ghost text-[var(--text-main)] hover:bg-[var(--bg-subtle)]"
+            onClick={() => setIsScanning(true)}
+            title="Scan Ticket QR"
+          >
+            <QrCode size={24} />
+          </button>
+          {/* ----------------------------- */}
+
           <button
             className="btn btn-gradient gap-2 px-6 rounded-full shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all border-none"
             onClick={() => setIsIntakeModalOpen(true)}
@@ -176,7 +185,6 @@ export default function Dashboard() {
                 <span className="text-lg font-bold">{currentUser.initial}</span>
               </div>
             </div>
-            {/* Dropdown Menu */}
             <ul tabIndex={0} className="mt-4 z-[1] p-2 shadow-2xl menu menu-sm dropdown-content rounded-xl w-60 bg-[var(--bg-surface)] border border-[var(--border-color)]">
               <li className="menu-title px-4 py-2 border-b border-[var(--border-color)] mb-2">
                 <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Signed In As</span>
@@ -189,8 +197,6 @@ export default function Dashboard() {
                   </span>
                 </div>
               </li>
-
-              {/* MANAGER ONLY MENU ITEMS */}
               {isManagement && (
                 <>
                   <div className="divider my-1 border-[var(--border-color)]"></div>
@@ -201,7 +207,6 @@ export default function Dashboard() {
                   </li>
                 </>
               )}
-
               <div className="divider my-1 border-[var(--border-color)]"></div>
               <li>
                 <button onClick={handleLogout} className="text-red-600 font-bold py-3 hover:bg-[var(--bg-subtle)] rounded-lg">
@@ -213,10 +218,9 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* ... (Your Grid and Card code remains the same) ... */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 animate-fade">
         <div className="lg:col-span-1">
-
-          {/* FILTER SIDEBAR */}
           <div className="sticky top-28 rounded-2xl shadow-sm bg-[var(--bg-surface)] border border-[var(--border-color)]">
             <div className="p-6">
               <div className="flex justify-between items-center mb-6 border-b border-[var(--border-color)] pb-4">
@@ -225,7 +229,6 @@ export default function Dashboard() {
                   <button onClick={() => { setStatusFilter('ALL'); setSearchQuery('') }} className="text-xs text-red-600 font-bold hover:underline">RESET</button>
                 )}
               </div>
-
               <div className="form-control w-full">
                 <label className="label py-0 mb-2"><span className="label-text text-xs font-bold uppercase text-[var(--text-muted)]">Ticket Status</span></label>
                 <select
@@ -242,13 +245,10 @@ export default function Dashboard() {
                   <option value="completed">Completed</option>
                 </select>
               </div>
-
-              {/* Mobile Search */}
               <div className="form-control w-full mt-4 md:hidden">
                 <label className="label py-0 mb-2"><span className="label-text text-xs font-bold uppercase text-[var(--text-muted)]">Search</span></label>
                 <input type="text" className="input input-bordered w-full" placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
               </div>
-
               <div className="mt-8 pt-6 border-t border-[var(--border-color)]">
                 <div className="stat p-0">
                   <div className="stat-title text-xs font-bold uppercase text-[var(--text-muted)] mb-1">Active Workload</div>
@@ -281,6 +281,14 @@ export default function Dashboard() {
       </div>
 
       <IntakeModal isOpen={isIntakeModalOpen} onClose={() => setIsIntakeModalOpen(false)} onSubmit={handleCreateTicket} />
+
+      {/* --- 2. NEW SCANNER MODAL --- */}
+      {/* This actually renders the camera when the button is clicked */}
+      {isScanning && (
+        <QRScanner onClose={() => setIsScanning(false)} />
+      )}
+      {/* ---------------------------- */}
+
     </div>
   )
 }
