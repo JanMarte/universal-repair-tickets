@@ -1,12 +1,13 @@
 // src/utils.js
 
+// 1. Phone Formatter (Your version is great, kept it)
 export function formatPhoneNumber(value) {
     if (!value) return '';
 
-    // 1. Strip all non-numeric characters
+    // Strip all non-numeric characters
     const phoneNumber = value.toString().replace(/[^\d]/g, '');
 
-    // 2. Return standard US format: (123) 456-7890
+    // Return standard US format: (123) 456-7890
     const phoneNumberLength = phoneNumber.length;
 
     if (phoneNumberLength < 4) return phoneNumber;
@@ -16,4 +17,13 @@ export function formatPhoneNumber(value) {
     }
 
     return `(${phoneNumber.slice(0, 3)}) ${phoneNumber.slice(3, 6)}-${phoneNumber.slice(6, 10)}`;
+}
+
+// 2. Currency Formatter (Add this!)
+// This ensures all prices look like "$150.00" instead of "150"
+export function formatCurrency(amount) {
+    return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+    }).format(amount || 0);
 }

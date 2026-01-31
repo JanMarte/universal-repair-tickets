@@ -6,46 +6,60 @@ import { format } from 'date-fns';
 export default function TicketCard({ ticket }) {
   const navigate = useNavigate();
 
-  // Color Logic (Dark Text on Pastel Backgrounds)
-  const getStatusColor = (status) => {
+  // 1. SOLID GRADIENT (Light Mode) vs GLOW (Dark Mode)
+  const getStatusStyles = (status) => {
     switch (status) {
       case 'intake':
-        return '!bg-sky-200 !text-sky-950 dark:!bg-sky-900/40 dark:!text-sky-200';
+        return 'bg-gradient-to-r from-blue-600 to-blue-500 text-white border-blue-700 shadow-blue-200 dark:shadow-none dark:bg-blue-900/40 dark:from-transparent dark:to-transparent dark:text-blue-200 dark:border-blue-800';
       case 'diagnosing':
-        return '!bg-purple-200 !text-purple-950 dark:!bg-purple-900/40 dark:!text-purple-200';
+        return 'bg-gradient-to-r from-purple-600 to-purple-500 text-white border-purple-700 shadow-purple-200 dark:shadow-none dark:bg-purple-900/40 dark:from-transparent dark:to-transparent dark:text-purple-200 dark:border-purple-800';
       case 'waiting_parts':
-        return '!bg-orange-200 !text-orange-950 dark:!bg-orange-900/40 dark:!text-orange-200';
+        return 'bg-gradient-to-r from-orange-600 to-orange-500 text-white border-orange-700 shadow-orange-200 dark:shadow-none dark:bg-orange-900/40 dark:from-transparent dark:to-transparent dark:text-orange-200 dark:border-orange-800';
       case 'repairing':
-        return '!bg-yellow-200 !text-yellow-950 dark:!bg-yellow-900/40 dark:!text-yellow-200';
+        return 'bg-gradient-to-r from-amber-500 to-amber-400 text-white border-amber-600 shadow-amber-200 dark:shadow-none dark:bg-amber-900/40 dark:from-transparent dark:to-transparent dark:text-amber-200 dark:border-amber-800';
       case 'ready_pickup':
-        return '!bg-emerald-200 !text-emerald-950 dark:!bg-emerald-900/40 dark:!text-emerald-200';
+        return 'bg-gradient-to-r from-emerald-600 to-emerald-500 text-white border-emerald-700 shadow-emerald-200 dark:shadow-none dark:bg-emerald-900/40 dark:from-transparent dark:to-transparent dark:text-emerald-200 dark:border-emerald-800';
       case 'completed':
-        return '!bg-slate-200 !text-slate-800 dark:!bg-slate-800 dark:!text-slate-300';
+        return 'bg-gradient-to-r from-slate-600 to-slate-500 text-white border-slate-700 shadow-slate-200 dark:shadow-none dark:bg-slate-800 dark:from-transparent dark:to-transparent dark:text-slate-400 dark:border-slate-700';
       default:
-        return '!bg-gray-200 !text-gray-900';
+        return 'bg-gray-600 text-white';
+    }
+  };
+
+  // 2. Matching Top Borders
+  const getBorderGradient = (status, isBackordered) => {
+    if (isBackordered) return 'linear-gradient(135deg, #f97316 0%, #ef4444 100%)';
+
+    switch (status) {
+      case 'intake': return 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)';
+      case 'diagnosing': return 'linear-gradient(135deg, #a855f7 0%, #7e22ce 100%)';
+      case 'waiting_parts': return 'linear-gradient(135deg, #f97316 0%, #c2410c 100%)';
+      case 'repairing': return 'linear-gradient(135deg, #eab308 0%, #ca8a04 100%)';
+      case 'ready_pickup': return 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+      case 'completed': return 'linear-gradient(135deg, #94a3b8 0%, #475569 100%)';
+      default: return 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)';
     }
   };
 
   return (
     <div
       onClick={() => navigate(`/ticket/${ticket.id}`)}
-      className="content-card group hover:scale-[1.02] cursor-pointer transition-all duration-300 relative overflow-hidden flex flex-col h-full p-6 pt-8"
+      className="content-card group hover:scale-[1.02] cursor-pointer transition-all duration-300 relative overflow-hidden flex flex-col h-full p-6 pt-8 border-[var(--border-color)]"
     >
-      {/* --- THE NEW GRADIENT TOP BORDER --- */}
-      {/* Using the exact same gradient as your 'Create Ticket' button */}
+      {/* Top Border Gradient */}
       <div
         className="absolute top-0 left-0 right-0 h-2"
-        style={{ background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)' }}
+        style={{ background: getBorderGradient(ticket.status, ticket.is_backordered) }}
       ></div>
 
-      <div className="flex justify-between items-start mb-3">
-        {/* Status Badge */}
-        <div className={`badge font-black uppercase text-[10px] tracking-wider py-3 border-none ${getStatusColor(ticket.status)}`}>
+      <div className="flex justify-between items-center mb-4">
+        {/* STATUS PILL */}
+        <div className={`inline-flex items-center justify-center px-3 py-1.5 border font-black uppercase text-[10px] tracking-widest rounded-md shadow-sm transition-all ${getStatusStyles(ticket.status)}`}>
           {ticket.status.replace('_', ' ')}
         </div>
 
         {/* Ticket ID */}
-        <span className="text-xs font-mono font-bold text-[var(--text-muted)]">
+        <span className="text-xs font-mono font-bold text-[var(--text-muted)] opacity-70">
           #{ticket.id}
         </span>
       </div>
@@ -54,15 +68,15 @@ export default function TicketCard({ ticket }) {
         {ticket.brand} {ticket.model}
       </h3>
 
-      {/* SERIAL NUMBER BADGE */}
+      {/* Serial Number */}
       {ticket.serial_number && (
-        <div className="flex items-center gap-1 text-xs font-mono text-[var(--text-muted)] mb-3 opacity-80">
+        <div className="flex items-center gap-1 text-xs font-mono text-[var(--text-muted)] mb-4 opacity-80">
           <Hash size={12} /> {ticket.serial_number}
         </div>
       )}
 
-      {/* DESCRIPTION BOX */}
-      <div className="bg-[var(--bg-subtle)] p-3 rounded-xl mb-4">
+      {/* Description Box */}
+      <div className="bg-[var(--bg-subtle)] p-3 rounded-xl mb-4 border border-transparent group-hover:border-[var(--border-color)] transition-colors">
         <p className="text-sm text-[var(--text-muted)] font-medium line-clamp-2 leading-relaxed">
           {ticket.description}
         </p>
@@ -75,8 +89,10 @@ export default function TicketCard({ ticket }) {
         </div>
 
         {ticket.is_backordered && (
-          <div className="tooltip tooltip-left" data-tip="Waiting on Parts">
-            <AlertTriangle size={18} className="text-red-500 animate-pulse" />
+          <div className="flex items-center gap-1 text-xs font-bold text-red-600 bg-red-100 border border-red-200 dark:text-red-300 dark:bg-red-900/20 dark:border-red-900/50 px-2 py-1 rounded-full">
+            <AlertTriangle size={14} />
+            {/* UPDATED LABEL HERE */}
+            <span>VENDOR BACKORDER</span>
           </div>
         )}
       </div>

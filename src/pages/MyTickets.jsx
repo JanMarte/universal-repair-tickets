@@ -1,13 +1,23 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
-import { LogOut, Package } from 'lucide-react';
+import { LogOut, Package, Moon, Sun } from 'lucide-react'; // Added Moon, Sun
 import { useNavigate } from 'react-router-dom';
-import TicketCard from '../components/TicketCard'; // <--- REUSING YOUR CARD DESIGN!
+import TicketCard from '../components/TicketCard';
 
 export default function MyTickets() {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
+  // NEW: Theme State
+  const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light');
+
   const navigate = useNavigate();
+
+  // 1. Apply Theme Class to HTML
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    if (theme === 'dark') document.documentElement.classList.add('dark');
+    else document.documentElement.classList.remove('dark');
+  }, [theme]);
 
   useEffect(() => {
     fetchMyTickets();
@@ -16,32 +26,11 @@ export default function MyTickets() {
   async function fetchMyTickets() {
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
-      // We find tickets by matching the Customer's EMAIL
-      // (Since they might not have a linked 'customer_id' in the profiles table yet, matching email is safer for self-service)
-      const { data } = await supabase
-        .from('tickets')
-        .select('*')
-        .ilike('customer_name', '%') // In a real app, you'd link via ID. For now, we query by auth user's email if stored, or just show empty.
-      // ACTUALLY: The best way for your current setup is to query by the customer_id if you linked it.
-      // Let's assume you want to show tickets where the email matches.
-
-      // BETTER QUERY:
-      // Find tickets where the 'email' column (if you added one) matches. 
-      // If you didn't add an email column to tickets, this is tricky. 
-      // Let's assume we linked them via the 'customer_id' logic we built earlier.
-    }
-
-    // Fallback: For now, let's just fetch tickets for this user if we can.
-    // If you haven't strictly linked Auth User -> Customer ID, this page might be empty.
-    // Let's try to find the customer profile first.
-
-    const { data: { user: currentUser } } = await supabase.auth.getUser();
-    if (currentUser) {
       // 1. Find the customer record with this email
       const { data: customer } = await supabase
         .from('customers')
         .select('id')
-        .eq('email', currentUser.email)
+        .eq('email', user.email)
         .single();
 
       if (customer) {
@@ -61,21 +50,46 @@ export default function MyTickets() {
     navigate('/login');
   };
 
+  // 2. Toggle Function
+  const toggleTheme = () => {
+    const newTheme = theme === 'light' ? 'dark' : 'light';
+    setTheme(newTheme);
+    localStorage.setItem('theme', newTheme);
+  };
+
   return (
-    <div className="min-h-screen p-6 font-sans">
+    <div className="min-h-screen p-4 md:p-6 font-sans transition-colors duration-300">
       <div className="max-w-5xl mx-auto">
 
-        {/* Navbar */}
-        <div className="navbar rounded-2xl mb-8 flex justify-between shadow-sm bg-[var(--bg-surface)] border border-[var(--border-color)] p-4">
-          <div className="flex items-center gap-2">
+        {/* NAVBAR */}
+        <div className="navbar rounded-2xl mb-8 flex justify-between items-center shadow-sm bg-[var(--bg-surface)] border border-[var(--border-color)] p-4">
+
+          {/* Left: Brand */}
+          <div className="flex items-center gap-3">
             <div className="bg-primary/10 p-2 rounded-full text-primary">
               <Package size={24} />
             </div>
-            <h1 className="text-xl font-black text-[var(--text-main)]">My Repair Status</h1>
+            <h1 className="text-xl font-black text-[var(--text-main)] tracking-tight">My Repair Status</h1>
           </div>
-          <button onClick={handleLogout} className="btn btn-ghost btn-sm text-red-500 font-bold">
-            <LogOut size={16} /> Logout
-          </button>
+
+          {/* Right: Actions */}
+          <div className="flex items-center gap-2">
+
+            {/* THEME TOGGLE */}
+            <button
+              className="btn btn-ghost btn-circle text-[var(--text-main)] hover:bg-[var(--bg-subtle)]"
+              onClick={toggleTheme}
+              title="Toggle Theme"
+            >
+              {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
+            </button>
+
+            <div className="h-6 w-px bg-[var(--border-color)] mx-1"></div>
+
+            <button onClick={handleLogout} className="btn btn-ghost btn-sm text-red-500 font-bold hover:bg-red-50 dark:hover:bg-red-900/20">
+              <LogOut size={18} /> <span className="hidden md:inline">Logout</span>
+            </button>
+          </div>
         </div>
 
         {/* Content */}
@@ -84,7 +98,6 @@ export default function MyTickets() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade">
             {tickets.map(ticket => (
-              // Using the same beautiful card component
               <TicketCard key={ticket.id} ticket={ticket} />
             ))}
 

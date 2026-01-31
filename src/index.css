@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 /* =========================================
-   THEME VARIABLES
+   1. THEME VARIABLES
    ========================================= */
 :root {
     /* Brand */
@@ -12,15 +12,20 @@
 
     /* Light Mode Colors - High Contrast */
     --bg-app: #f0f4f8;
+    /* Page Background */
+    --bg-main: #f0f4f8;
+    /* Alias for compatibility */
     --bg-surface: #ffffff;
+    /* Cards/Modals */
     --bg-subtle: #f1f5f9;
+    /* Inputs/Sidebars */
 
     --text-main: #0f172a;
     --text-muted: #475569;
 
     --border-color: #cbd5e1;
 
-    /* Texture & Glass */
+    /* Texture & Glass Effects */
     --pattern-color: rgba(148, 163, 184, 0.15);
     --glass-border: 1px solid rgba(255, 255, 255, 0.8);
     --glass-bg: rgba(255, 255, 255, 0.9);
@@ -30,6 +35,7 @@
 [data-theme='dark'] {
     /* Dark Mode Colors */
     --bg-app: #020617;
+    --bg-main: #020617;
     --bg-surface: #0f172a;
     --bg-subtle: #1e293b;
 
@@ -38,7 +44,7 @@
 
     --border-color: #1e293b;
 
-    /* Texture & Glass */
+    /* Texture & Glass Effects */
     --pattern-color: rgba(255, 255, 255, 0.05);
     --glass-border: 1px solid rgba(255, 255, 255, 0.08);
     --glass-bg: rgba(15, 23, 42, 0.85);
@@ -46,11 +52,12 @@
 }
 
 /* =========================================
-   GLOBAL STYLES
+   2. GLOBAL STYLES
    ========================================= */
 body {
     background-color: var(--bg-app);
     color: var(--text-main);
+    /* Custom Dot Pattern Background */
     background-image:
         linear-gradient(var(--pattern-color) 1px, transparent 1px),
         linear-gradient(90deg, var(--pattern-color) 1px, transparent 1px);
@@ -60,7 +67,7 @@ body {
 }
 
 /* =========================================
-   UTILITY & COMPONENT CLASSES
+   3. UTILITY & COMPONENT CLASSES
    ========================================= */
 
 /* --- DaisyUI Fixes --- */
@@ -149,7 +156,10 @@ textarea:focus {
     @apply font-medium hover:bg-slate-50 dark:hover:bg-slate-700 dark:hover:text-white transition-colors;
 }
 
-/* --- Animations --- */
+/* =========================================
+   4. ANIMATIONS
+   ========================================= */
+
 .card-hover-effect {
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -164,6 +174,22 @@ textarea:focus {
     border-color: #4f46e5;
 }
 
+/* --- Standard Fade --- */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+.animate-fade {
+    animation: fadeIn 0.5s ease-out forwards;
+}
+
+/* --- Pop In (Modals) --- */
 @keyframes popIn {
     0% {
         opacity: 0;
@@ -180,20 +206,58 @@ textarea:focus {
     animation: popIn 0.3s ease-out forwards;
 }
 
-.animate-fade {
-    animation: fadeIn 0.5s ease-out forwards;
-}
-
-@keyframes fadeIn {
+/* --- Fade In Up (Dashboard Cards) --- */
+@keyframes fade-in-up {
     from {
         opacity: 0;
+        transform: translateY(10px);
     }
 
     to {
         opacity: 1;
+        transform: translateY(0);
     }
 }
 
+.animate-fade-in-up {
+    animation: fade-in-up 0.4s ease-out forwards;
+}
+
+/* --- Bounce In (Mobile Buttons) --- */
+@keyframes bounce-in {
+    0% {
+        transform: scale(0);
+    }
+
+    50% {
+        transform: scale(1.1);
+    }
+
+    100% {
+        transform: scale(1);
+    }
+}
+
+.animate-bounce-in {
+    animation: bounce-in 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+/* --- Slide Up (Mobile Drawers) --- */
+@keyframes slide-up {
+    from {
+        transform: translateY(100%);
+    }
+
+    to {
+        transform: translateY(0);
+    }
+}
+
+.animate-slide-up {
+    animation: slide-up 0.3s ease-out forwards;
+}
+
+/* --- Shake (Error States) --- */
 @keyframes shake {
 
     0%,
@@ -210,16 +274,15 @@ textarea:focus {
     }
 }
 
-/* CRITICAL: This class must exist for the React code to work */
 .animate-shake {
     animation: shake 0.3s ease-in-out;
 }
 
 /* =========================================
-   CRITICAL OVERRIDES (Add this at the bottom)
+   5. CRITICAL OVERRIDES
    ========================================= */
 
-/* 1. Force Red Border on Error (Overrides Global Input Styles) */
+/* Force Red Border on Error (Overrides Global Input Styles) */
 .input-error,
 .textarea-error {
     border-color: #ef4444 !important;
@@ -230,7 +293,7 @@ textarea:focus {
     /* Red-800 */
 }
 
-/* 2. Fix Dark Mode Errors */
+/* Fix Dark Mode Errors */
 [data-theme='dark'] .input-error,
 [data-theme='dark'] .textarea-error {
     border-color: #ef4444 !important;
@@ -240,7 +303,7 @@ textarea:focus {
     /* Red-200 */
 }
 
-/* 3. Fix Placeholder Color in Error State */
+/* Fix Placeholder Color in Error State */
 .input-error::placeholder,
 .textarea-error::placeholder {
     color: #fca5a5 !important;
