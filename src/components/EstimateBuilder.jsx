@@ -4,7 +4,8 @@ import { Plus, Trash2, DollarSign, Save, AlertCircle } from 'lucide-react';
 import { formatCurrency } from '../utils';
 import { useToast } from '../context/ToastProvider';
 
-export default function EstimateBuilder({ ticketId, onTotalChange, onActivityLog }) {
+// NEW PROP: refreshTrigger
+export default function EstimateBuilder({ ticketId, onTotalChange, onActivityLog, refreshTrigger }) {
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(true);
     const { addToast } = useToast();
@@ -12,12 +13,12 @@ export default function EstimateBuilder({ ticketId, onTotalChange, onActivityLog
     // New Item Form
     const [newItem, setNewItem] = useState({ description: '', part_cost: '', labor_cost: '' });
 
+    // REFRESH LOGIC: Re-fetch whenever ticketId OR refreshTrigger changes
     useEffect(() => {
         fetchItems();
-    }, [ticketId]);
+    }, [ticketId, refreshTrigger]);
 
     useEffect(() => {
-        // Calculate total whenever items change
         const total = items.reduce((sum, item) => sum + (item.part_cost || 0) + (item.labor_cost || 0), 0);
         if (onTotalChange) onTotalChange(total);
     }, [items]);
@@ -47,7 +48,6 @@ export default function EstimateBuilder({ ticketId, onTotalChange, onActivityLog
             setItems([...items, data]);
             setNewItem({ description: '', part_cost: '', labor_cost: '' });
 
-            // LOG ADDITION
             if (onActivityLog) onActivityLog('ESTIMATE ADD', `Added item: ${newItem.description} ($${partCost + laborCost})`);
         }
     };
@@ -61,7 +61,6 @@ export default function EstimateBuilder({ ticketId, onTotalChange, onActivityLog
         } else {
             setItems(items.filter(i => i.id !== itemId));
 
-            // LOG REMOVAL (This handles your requirement)
             if (onActivityLog && itemToRemove) {
                 onActivityLog('ESTIMATE REMOVE', `Removed item: ${itemToRemove.description} ($${itemToRemove.part_cost + itemToRemove.labor_cost})`);
             }
@@ -116,7 +115,7 @@ export default function EstimateBuilder({ ticketId, onTotalChange, onActivityLog
                         <input
                             type="text"
                             placeholder="Description (e.g. Replace Belt)"
-                            className="input input-bordered flex-1"
+                            className="input input-bordered flex-1 bg-[var(--bg-surface)] text-[var(--text-main)]"
                             value={newItem.description}
                             onChange={e => setNewItem({ ...newItem, description: e.target.value })}
                         />
@@ -124,18 +123,18 @@ export default function EstimateBuilder({ ticketId, onTotalChange, onActivityLog
                             <input
                                 type="number"
                                 placeholder="Parts $"
-                                className="input input-bordered w-24"
+                                className="input input-bordered w-24 bg-[var(--bg-surface)] text-[var(--text-main)]"
                                 value={newItem.part_cost}
                                 onChange={e => setNewItem({ ...newItem, part_cost: e.target.value })}
                             />
                             <input
                                 type="number"
                                 placeholder="Labor $"
-                                className="input input-bordered w-24"
+                                className="input input-bordered w-24 bg-[var(--bg-surface)] text-[var(--text-main)]"
                                 value={newItem.labor_cost}
                                 onChange={e => setNewItem({ ...newItem, labor_cost: e.target.value })}
                             />
-                            <button onClick={handleAddItem} className="btn btn-square btn-gradient" disabled={!newItem.description}>
+                            <button onClick={handleAddItem} className="btn btn-square btn-gradient text-white" disabled={!newItem.description}>
                                 <Plus size={20} />
                             </button>
                         </div>

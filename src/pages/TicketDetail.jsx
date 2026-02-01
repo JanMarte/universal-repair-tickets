@@ -4,10 +4,11 @@ import { useReactToPrint } from 'react-to-print';
 import { format } from 'date-fns';
 import {
     ArrowLeft, Send, MessageSquare, Lock, Globe,
-    AlertTriangle, Save, X, Edit3, Printer, Calendar, User, Phone, Hash, Wrench, AlertCircle, FileText, History, Moon, Sun, QrCode, Clock, Eye, ShieldAlert, Laptop, PlusCircle
+    AlertTriangle, Save, X, Edit3, Printer, Calendar, User, Phone, Hash, Wrench, AlertCircle, FileText, History, Moon, Sun, QrCode, Clock, Eye, ShieldAlert, Laptop, PlusCircle, CheckCircle, LockKeyhole
 } from 'lucide-react';
 
 import { supabase } from '../supabaseClient';
+import PartsOrderManager from '../components/PartsOrderManager';
 import EstimateBuilder from '../components/EstimateBuilder';
 import CustomerEstimateView from '../components/CustomerEstimateView';
 import { useToast } from '../context/ToastProvider';
@@ -37,6 +38,7 @@ export default function TicketDetail() {
     const [activeTab, setActiveTab] = useState('public');
     const [isSending, setIsSending] = useState(false);
     const [selectedLog, setSelectedLog] = useState(null);
+    const [estimateRefreshTrigger, setEstimateRefreshTrigger] = useState(0);
 
     // Mobile & Theme
     const [isMobileChatOpen, setIsMobileChatOpen] = useState(false);
@@ -50,6 +52,12 @@ export default function TicketDetail() {
 
     const isStaff = ['employee', 'manager', 'admin'].includes(userRole);
     const isManagement = ['manager', 'admin'].includes(userRole);
+
+    // --- LOCKDOWN LOGIC ---
+    // If ticket is completed, it is "Closed"
+    const isClosed = ticket?.status === 'completed';
+    // Managers can always edit. Employees can only edit if NOT closed.
+    const canEdit = isManagement || (isStaff && !isClosed);
 
     const handlePrint = useReactToPrint({
         content: () => labelRef.current,
@@ -246,7 +254,13 @@ export default function TicketDetail() {
         setTicket({ ...ticket, status: newStatus });
         await supabase.from('tickets').update({ status: newStatus }).eq('id', id);
         addToast(`Status updated`, 'success');
-        logAudit('STATUS CHANGE', `Changed status from ${oldStatus} to ${newStatus}`, { from: oldStatus, to: newStatus });
+
+        // Log it (Special log if re-opening)
+        if (oldStatus === 'completed' && newStatus !== 'completed') {
+            logAudit('TICKET REOPENED', `Ticket reactivated by manager (Changed from Completed to ${newStatus})`);
+        } else {
+            logAudit('STATUS CHANGE', `Changed status from ${oldStatus} to ${newStatus}`, { from: oldStatus, to: newStatus });
+        }
     };
 
     const toggleBackorder = async () => {
@@ -284,12 +298,8 @@ export default function TicketDetail() {
         }
     };
 
-    // --- UPDATED COLORS: High Contrast for Light Mode ---
     const getLogColor = (action) => {
-        // LIGHT MODE: bg-X-100 (Solid/Visible), Text-X-900 (High Contrast)
-        // DARK MODE: bg-X-900/20 (Transparent), Text-X-300 (Bright)
-
-        if (action.includes('STATUS'))
+        if (action.includes('STATUS') || action.includes('REOPEN'))
             return 'bg-blue-100 text-blue-900 border-blue-200 hover:bg-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800 dark:hover:bg-blue-900/30';
         if (action.includes('ESTIMATE'))
             return 'bg-green-100 text-green-900 border-green-200 hover:bg-green-200 dark:bg-green-900/20 dark:text-green-300 dark:border-green-800 dark:hover:bg-green-900/30';
@@ -336,14 +346,28 @@ export default function TicketDetail() {
                 <div ref={chatEndRef}></div>
             </div>
 
-            <form onSubmit={sendMessage} className="p-4 bg-[var(--bg-surface)] border-t border-[var(--border-color)] flex-none pb-safe">
-                <div className="flex gap-2 items-end">
-                    <textarea ref={inputRef} rows={1} placeholder={activeTab === 'internal' ? "Private note..." : "Message..."} className={`textarea textarea-bordered w-full resize-none overflow-hidden min-h-[3rem] text-base py-3 bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] ${activeTab === 'internal' ? 'focus:border-yellow-500' : 'focus:border-primary'}`} value={newMessage} onChange={(e) => setNewMessage(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(e); } }} disabled={isSending} />
-                    <button type="submit" className={`btn btn-square shadow-sm h-12 w-12 flex-shrink-0 ${activeTab === 'internal' ? 'btn-warning text-white' : 'btn-primary text-white'}`} disabled={isSending || !newMessage.trim()}>
-                        {isSending ? <span className="loading loading-spinner loading-xs"></span> : <Send size={20} />}
-                    </button>
+            {/* --- CHAT INPUT OR CLOSED BANNER --- */}
+            {isClosed ? (
+                <div className="p-6 bg-slate-50 dark:bg-slate-800/50 border-t border-[var(--border-color)] flex flex-col items-center justify-center text-center">
+                    <div className="bg-slate-200 dark:bg-slate-700 p-3 rounded-full mb-2">
+                        <LockKeyhole size={24} className="text-slate-500 dark:text-slate-400" />
+                    </div>
+                    <h3 className="font-black text-[var(--text-main)]">Ticket Archived</h3>
+                    <p className="text-xs text-[var(--text-muted)] mt-1 max-w-xs">
+                        This repair is complete.
+                        {isManagement ? " Change status to reopen." : " Contact a manager to reopen."}
+                    </p>
                 </div>
-            </form>
+            ) : (
+                <form onSubmit={sendMessage} className="p-4 bg-[var(--bg-surface)] border-t border-[var(--border-color)] flex-none pb-safe">
+                    <div className="flex gap-2 items-end">
+                        <textarea ref={inputRef} rows={1} placeholder={activeTab === 'internal' ? "Private note..." : "Message..."} className={`textarea textarea-bordered w-full resize-none overflow-hidden min-h-[3rem] text-base py-3 bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] ${activeTab === 'internal' ? 'focus:border-yellow-500' : 'focus:border-primary'}`} value={newMessage} onChange={(e) => setNewMessage(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(e); } }} disabled={isSending} />
+                        <button type="submit" className={`btn btn-square shadow-sm h-12 w-12 flex-shrink-0 ${activeTab === 'internal' ? 'btn-warning text-white' : 'btn-primary text-white'}`} disabled={isSending || !newMessage.trim()}>
+                            {isSending ? <span className="loading loading-spinner loading-xs"></span> : <Send size={20} />}
+                        </button>
+                    </div>
+                </form>
+            )}
         </div>
     );
 
@@ -404,7 +428,13 @@ export default function TicketDetail() {
                         {isStaff ? (
                             <div className="flex flex-col gap-2">
                                 <div className="flex gap-2 w-full lg:w-auto">
-                                    <select className={`select select-bordered flex-1 lg:flex-none w-full lg:w-52 h-12 text-sm font-black uppercase tracking-wide border-2 focus:outline-none ${getStatusColor(ticket.status)}`} value={ticket.status} onChange={(e) => updateStatus(e.target.value)}>
+                                    {/* STATUS DROPDOWN: Disabled for Employees if Closed */}
+                                    <select
+                                        className={`select select-bordered flex-1 lg:flex-none w-full lg:w-52 h-12 text-sm font-black uppercase tracking-wide border-2 focus:outline-none ${getStatusColor(ticket.status)}`}
+                                        value={ticket.status}
+                                        onChange={(e) => updateStatus(e.target.value)}
+                                        disabled={!canEdit}
+                                    >
                                         <option value="intake" className="text-black bg-white">In Queue</option>
                                         <option value="diagnosing" className="text-black bg-white">Diagnosing</option>
                                         <option value="waiting_parts" className="text-black bg-white">Waiting on Parts</option>
@@ -416,9 +446,10 @@ export default function TicketDetail() {
                                 </div>
                                 <div className="form-control w-full lg:w-52">
                                     <select
-                                        className="select select-bordered w-full h-12 text-base font-bold bg-[var(--bg-subtle)] text-[var(--text-main)] border-2 focus:border-indigo-500 focus:outline-none"
+                                        className="select select-bordered w-full h-12 text-base font-bold bg-[var(--bg-subtle)] text-[var(--text-main)] border-2 focus:border-indigo-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
                                         value={ticket.assigned_to || ""}
                                         onChange={(e) => handleAssignment(e.target.value)}
+                                        disabled={!canEdit}
                                     >
                                         <option value="">-- Unassigned --</option>
                                         {employees.map(emp => (
@@ -444,12 +475,12 @@ export default function TicketDetail() {
                     <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl shadow-sm overflow-hidden">
                         <div className="bg-[var(--bg-subtle)] px-6 py-4 border-b border-[var(--border-color)] flex justify-between items-center">
                             <h2 className="text-xs font-bold uppercase text-[var(--text-muted)] tracking-widest flex items-center gap-2"><Wrench size={16} /> Diagnosis & Notes</h2>
-                            {(userRole === 'manager' || userRole === 'admin') && (
+                            {/* Controls Hidden if Closed (Unless Manager) */}
+                            {canEdit && (userRole === 'manager' || userRole === 'admin') && (
                                 <button onClick={() => setIsEditModalOpen(true)} className="btn btn-sm btn-ghost gap-2 text-indigo-500"><Edit3 size={16} /> <span className="font-bold">Edit Details</span></button>
                             )}
                         </div>
                         <div className="p-6">
-                            {/* --- CUSTOMER ISSUE BOX (Updated for Light/Dark Mode) --- */}
                             <div className="bg-white dark:bg-slate-800/50 p-5 rounded-xl border border-slate-200 dark:border-slate-700 mb-6">
                                 <h3 className="text-xs font-bold uppercase text-slate-500 mb-3 flex items-center gap-2"><AlertCircle size={14} /> Customer Reported Issue</h3>
                                 <p className="text-slate-800 dark:text-slate-100 whitespace-pre-wrap font-medium">{ticket.description || "No description provided."}</p>
@@ -462,13 +493,33 @@ export default function TicketDetail() {
                                             <div>
                                                 <h4 className={`font-bold flex items-center gap-2 ${ticket.is_backordered ? 'text-red-600' : 'text-[var(--text-main)]'}`}>{ticket.is_backordered ? <AlertTriangle size={18} /> : <AlertCircle size={18} />} Vendor Backorder Alert</h4>
                                             </div>
-                                            <button onClick={toggleBackorder} className={`w-14 h-7 rounded-full transition-colors relative shadow-inner ${ticket.is_backordered ? 'bg-red-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
+                                            <button
+                                                onClick={toggleBackorder}
+                                                disabled={!canEdit}
+                                                className={`w-14 h-7 rounded-full transition-colors relative shadow-inner ${ticket.is_backordered ? 'bg-red-500' : 'bg-slate-300 dark:bg-slate-600'} ${!canEdit ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                            >
                                                 <div className={`w-5 h-5 bg-white rounded-full absolute top-1 shadow-md transition-transform duration-200 ${ticket.is_backordered ? 'left-8' : 'left-1'}`} />
                                             </button>
                                         </div>
                                     </div>
-                                    <div className="animate-fade-in-up mt-8 border-t border-[var(--border-color)] pt-6">
-                                        <EstimateBuilder ticketId={id} onTotalChange={handleEstimateUpdate} onActivityLog={handleEstimateLog} />
+
+                                    {/* HIDE ESTIMATE BUILDER CONTROLS IF CLOSED */}
+                                    <div className={`animate-fade-in-up mt-8 border-t border-[var(--border-color)] pt-6 ${isClosed ? 'pointer-events-none opacity-75' : ''}`}>
+
+                                        {/* LINKED COMPONENTS: Passing refresh trigger so Estimate updates when Part is added */}
+                                        <EstimateBuilder
+                                            ticketId={id}
+                                            onTotalChange={handleEstimateUpdate}
+                                            onActivityLog={handleEstimateLog}
+                                            refreshTrigger={estimateRefreshTrigger}
+                                        />
+
+                                        <PartsOrderManager
+                                            ticketId={id}
+                                            onActivityLog={handleEstimateLog}
+                                            onAddToEstimate={() => setEstimateRefreshTrigger(prev => prev + 1)}
+                                        />
+
                                     </div>
                                 </>
                             )}
@@ -476,10 +527,9 @@ export default function TicketDetail() {
                         </div>
                     </div>
 
-                    {/* --- TICKET TIMELINE (MANAGEMENT ONLY) --- */}
+                    {/* --- TICKET TIMELINE --- */}
                     {isManagement && (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in-up">
-                            {/* LEFT COLUMN: ACTIVITY LOG */}
                             <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl shadow-sm overflow-hidden">
                                 <div className="bg-[var(--bg-subtle)] px-4 py-3 border-b border-[var(--border-color)] flex justify-between items-center">
                                     <h2 className="text-[10px] font-bold uppercase text-[var(--text-muted)] tracking-widest flex items-center gap-2">
@@ -510,7 +560,6 @@ export default function TicketDetail() {
                                 </div>
                             </div>
 
-                            {/* RIGHT COLUMN: FUTURE FEATURE PLACEHOLDER */}
                             <div className="border-2 border-dashed border-[var(--border-color)] rounded-xl flex flex-col items-center justify-center p-6 text-[var(--text-muted)] bg-[var(--bg-subtle)] bg-opacity-50">
                                 <PlusCircle size={32} className="mb-2 opacity-50" />
                                 <span className="font-bold text-sm uppercase tracking-wider">Future Feature Slot</span>
