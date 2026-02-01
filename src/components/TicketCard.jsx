@@ -76,10 +76,8 @@ export default function TicketCard({ ticket }) {
       )}
 
       {/* Description Box */}
-      <div className="bg-[var(--bg-subtle)] p-3 rounded-xl mb-4 border border-transparent group-hover:border-[var(--border-color)] transition-colors">
-        <p className="text-sm text-[var(--text-muted)] font-medium line-clamp-2 leading-relaxed">
-          {ticket.description}
-        </p>
+      <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-lg border border-slate-200 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-300 font-medium">
+        {ticket.description || "No description."}
       </div>
 
       <div className="border-t border-[var(--border-color)] pt-3 flex justify-between items-center mt-auto">

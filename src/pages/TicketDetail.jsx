@@ -4,13 +4,14 @@ import { useReactToPrint } from 'react-to-print';
 import { format } from 'date-fns';
 import {
     ArrowLeft, Send, MessageSquare, Lock, Globe,
-    AlertTriangle, Save, X, Edit3, Printer, Calendar, User, Phone, Hash, Wrench, AlertCircle, FileText, History, Moon, Sun, QrCode, Clock, Eye, ShieldAlert, Laptop, PlusCircle, CheckCircle, LockKeyhole
+    AlertTriangle, Save, X, Edit3, Printer, Calendar, User, Phone, Hash, Wrench, AlertCircle, FileText, History, Moon, Sun, QrCode, Clock, Eye, ShieldAlert, Laptop, PlusCircle, CheckCircle, LockKeyhole, DollarSign, PenTool, Truck
 } from 'lucide-react';
 
 import { supabase } from '../supabaseClient';
-import PartsOrderManager from '../components/PartsOrderManager';
 import EstimateBuilder from '../components/EstimateBuilder';
 import CustomerEstimateView from '../components/CustomerEstimateView';
+import PartsOrderManager from '../components/PartsOrderManager';
+import PartSourcing from '../components/PartSourcing';
 import { useToast } from '../context/ToastProvider';
 import { formatPhoneNumber } from '../utils';
 import QRScanner from '../components/QRScanner';
@@ -26,6 +27,7 @@ export default function TicketDetail() {
     const [auditLogs, setAuditLogs] = useState([]);
     const [employees, setEmployees] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [estimateRefreshTrigger, setEstimateRefreshTrigger] = useState(0);
 
     // User State
     const [currentUser, setCurrentUser] = useState(null);
@@ -38,7 +40,6 @@ export default function TicketDetail() {
     const [activeTab, setActiveTab] = useState('public');
     const [isSending, setIsSending] = useState(false);
     const [selectedLog, setSelectedLog] = useState(null);
-    const [estimateRefreshTrigger, setEstimateRefreshTrigger] = useState(0);
 
     // Mobile & Theme
     const [isMobileChatOpen, setIsMobileChatOpen] = useState(false);
@@ -53,10 +54,7 @@ export default function TicketDetail() {
     const isStaff = ['employee', 'manager', 'admin'].includes(userRole);
     const isManagement = ['manager', 'admin'].includes(userRole);
 
-    // --- LOCKDOWN LOGIC ---
-    // If ticket is completed, it is "Closed"
     const isClosed = ticket?.status === 'completed';
-    // Managers can always edit. Employees can only edit if NOT closed.
     const canEdit = isManagement || (isStaff && !isClosed);
 
     const handlePrint = useReactToPrint({
@@ -255,7 +253,6 @@ export default function TicketDetail() {
         await supabase.from('tickets').update({ status: newStatus }).eq('id', id);
         addToast(`Status updated`, 'success');
 
-        // Log it (Special log if re-opening)
         if (oldStatus === 'completed' && newStatus !== 'completed') {
             logAudit('TICKET REOPENED', `Ticket reactivated by manager (Changed from Completed to ${newStatus})`);
         } else {
@@ -298,17 +295,39 @@ export default function TicketDetail() {
         }
     };
 
-    const getLogColor = (action) => {
+    // --- NEW: LOG VISUALS ---
+    // Returns { colorClass, icon } for each log type
+    const getLogVisuals = (action) => {
         if (action.includes('STATUS') || action.includes('REOPEN'))
-            return 'bg-blue-100 text-blue-900 border-blue-200 hover:bg-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800 dark:hover:bg-blue-900/30';
+            return {
+                bg: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300',
+                icon: <ActivityIcon size={14} />
+            };
         if (action.includes('ESTIMATE'))
-            return 'bg-green-100 text-green-900 border-green-200 hover:bg-green-200 dark:bg-green-900/20 dark:text-green-300 dark:border-green-800 dark:hover:bg-green-900/30';
+            return {
+                bg: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300',
+                icon: <DollarSign size={14} />
+            };
         if (action.includes('ASSIGN'))
-            return 'bg-purple-100 text-purple-900 border-purple-200 hover:bg-purple-200 dark:bg-purple-900/20 dark:text-purple-300 dark:border-purple-800 dark:hover:bg-purple-900/30';
+            return {
+                bg: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300',
+                icon: <User size={14} />
+            };
+        if (action.includes('PART'))
+            return {
+                bg: 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300',
+                icon: <Truck size={14} />
+            };
         if (action.includes('DELETE') || action.includes('REMOVE'))
-            return 'bg-red-100 text-red-900 border-red-200 hover:bg-red-200 dark:bg-red-900/20 dark:text-red-300 dark:border-red-800 dark:hover:bg-red-900/30';
+            return {
+                bg: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300',
+                icon: <AlertCircle size={14} />
+            };
 
-        return 'bg-slate-100 text-slate-800 border-slate-200 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 dark:hover:bg-slate-700';
+        return {
+            bg: 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400',
+            icon: <FileText size={14} />
+        };
     };
 
     const renderChatInterface = () => (
@@ -346,7 +365,6 @@ export default function TicketDetail() {
                 <div ref={chatEndRef}></div>
             </div>
 
-            {/* --- CHAT INPUT OR CLOSED BANNER --- */}
             {isClosed ? (
                 <div className="p-6 bg-slate-50 dark:bg-slate-800/50 border-t border-[var(--border-color)] flex flex-col items-center justify-center text-center">
                     <div className="bg-slate-200 dark:bg-slate-700 p-3 rounded-full mb-2">
@@ -428,7 +446,6 @@ export default function TicketDetail() {
                         {isStaff ? (
                             <div className="flex flex-col gap-2">
                                 <div className="flex gap-2 w-full lg:w-auto">
-                                    {/* STATUS DROPDOWN: Disabled for Employees if Closed */}
                                     <select
                                         className={`select select-bordered flex-1 lg:flex-none w-full lg:w-52 h-12 text-sm font-black uppercase tracking-wide border-2 focus:outline-none ${getStatusColor(ticket.status)}`}
                                         value={ticket.status}
@@ -475,15 +492,16 @@ export default function TicketDetail() {
                     <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl shadow-sm overflow-hidden">
                         <div className="bg-[var(--bg-subtle)] px-6 py-4 border-b border-[var(--border-color)] flex justify-between items-center">
                             <h2 className="text-xs font-bold uppercase text-[var(--text-muted)] tracking-widest flex items-center gap-2"><Wrench size={16} /> Diagnosis & Notes</h2>
-                            {/* Controls Hidden if Closed (Unless Manager) */}
                             {canEdit && (userRole === 'manager' || userRole === 'admin') && (
                                 <button onClick={() => setIsEditModalOpen(true)} className="btn btn-sm btn-ghost gap-2 text-indigo-500"><Edit3 size={16} /> <span className="font-bold">Edit Details</span></button>
                             )}
                         </div>
                         <div className="p-6">
-                            <div className="bg-white dark:bg-slate-800/50 p-5 rounded-xl border border-slate-200 dark:border-slate-700 mb-6">
-                                <h3 className="text-xs font-bold uppercase text-slate-500 mb-3 flex items-center gap-2"><AlertCircle size={14} /> Customer Reported Issue</h3>
-                                <p className="text-slate-800 dark:text-slate-100 whitespace-pre-wrap font-medium">{ticket.description || "No description provided."}</p>
+
+                            {/* --- UPDATED: CLEANER CUSTOMER REPORT BOX --- */}
+                            <div className="bg-slate-50 dark:bg-slate-800/50 p-5 rounded-r-xl rounded-bl-xl border-l-4 border-l-indigo-500 border-y border-r border-slate-200 dark:border-slate-700 mb-6 shadow-sm">
+                                <h3 className="text-xs font-bold uppercase text-indigo-600 dark:text-indigo-400 mb-2 flex items-center gap-2"><AlertCircle size={14} /> Customer Reported Issue</h3>
+                                <p className="text-slate-800 dark:text-slate-100 whitespace-pre-wrap font-medium leading-relaxed">{ticket.description || "No description provided."}</p>
                             </div>
 
                             {isStaff && (
@@ -502,24 +520,10 @@ export default function TicketDetail() {
                                             </button>
                                         </div>
                                     </div>
-
-                                    {/* HIDE ESTIMATE BUILDER CONTROLS IF CLOSED */}
                                     <div className={`animate-fade-in-up mt-8 border-t border-[var(--border-color)] pt-6 ${isClosed ? 'pointer-events-none opacity-75' : ''}`}>
-
-                                        {/* LINKED COMPONENTS: Passing refresh trigger so Estimate updates when Part is added */}
-                                        <EstimateBuilder
-                                            ticketId={id}
-                                            onTotalChange={handleEstimateUpdate}
-                                            onActivityLog={handleEstimateLog}
-                                            refreshTrigger={estimateRefreshTrigger}
-                                        />
-
-                                        <PartsOrderManager
-                                            ticketId={id}
-                                            onActivityLog={handleEstimateLog}
-                                            onAddToEstimate={() => setEstimateRefreshTrigger(prev => prev + 1)}
-                                        />
-
+                                        <EstimateBuilder ticketId={id} onTotalChange={handleEstimateUpdate} onActivityLog={handleEstimateLog} refreshTrigger={estimateRefreshTrigger} />
+                                        <PartsOrderManager ticketId={id} onActivityLog={handleEstimateLog} onAddToEstimate={() => setEstimateRefreshTrigger(prev => prev + 1)} />
+                                        <PartSourcing initialQuery={`${ticket.brand} ${ticket.model}`} ticketId={id} />
                                     </div>
                                 </>
                             )}
@@ -527,7 +531,7 @@ export default function TicketDetail() {
                         </div>
                     </div>
 
-                    {/* --- TICKET TIMELINE --- */}
+                    {/* --- UPDATED: CLEANER ACTIVITY LOG --- */}
                     {isManagement && (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in-up">
                             <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl shadow-sm overflow-hidden">
@@ -536,25 +540,38 @@ export default function TicketDetail() {
                                         <ShieldAlert size={14} /> Restricted Activity Log
                                     </h2>
                                 </div>
-                                <div className="p-3 max-h-60 overflow-y-auto custom-scrollbar">
+                                <div className="max-h-64 overflow-y-auto custom-scrollbar">
                                     {auditLogs.length === 0 ? (
-                                        <p className="text-xs text-[var(--text-muted)] italic text-center py-4">No activity recorded yet.</p>
+                                        <p className="text-xs text-[var(--text-muted)] italic text-center py-6">No activity recorded yet.</p>
                                     ) : (
-                                        <div className="space-y-2">
-                                            {auditLogs.map(log => (
-                                                <div
-                                                    key={log.id}
-                                                    onClick={() => setSelectedLog(log)}
-                                                    className={`p-2 rounded-md border flex items-center justify-between cursor-pointer transition-all ${getLogColor(log.action)}`}
-                                                >
-                                                    <div className="flex items-center gap-2 overflow-hidden">
-                                                        <div className="text-[10px] font-black uppercase tracking-wide min-w-[70px]">{log.action.split(' ')[0]}</div>
-                                                        <div className="h-3 w-px bg-current opacity-20 flex-none"></div>
-                                                        <div className="text-xs font-semibold truncate text-[var(--text-main)]">{log.details}</div>
+                                        <div className="divide-y divide-[var(--border-color)]">
+                                            {auditLogs.map(log => {
+                                                const visuals = getLogVisuals(log.action);
+                                                return (
+                                                    <div
+                                                        key={log.id}
+                                                        onClick={() => setSelectedLog(log)}
+                                                        className="p-3 flex items-start gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors group"
+                                                    >
+                                                        {/* Icon Circle */}
+                                                        <div className={`w-8 h-8 rounded-full flex-none flex items-center justify-center shadow-sm ${visuals.bg}`}>
+                                                            {visuals.icon}
+                                                        </div>
+
+                                                        {/* Content */}
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="flex justify-between items-baseline mb-0.5">
+                                                                <span className="text-[10px] font-black uppercase tracking-wider opacity-50">{log.action.split(' ')[0]}</span>
+                                                                <span className="text-[9px] text-[var(--text-muted)]">{format(new Date(log.created_at), 'MMM d, h:mm a')}</span>
+                                                            </div>
+                                                            <div className="text-xs font-medium text-[var(--text-main)] truncate">{log.details}</div>
+                                                            <div className="text-[9px] text-[var(--text-muted)] mt-0.5 flex items-center gap-1">
+                                                                <User size={8} /> {log.actor_name.split(' ')[0]}
+                                                            </div>
+                                                        </div>
                                                     </div>
-                                                    <Eye size={12} className="opacity-40 flex-none ml-2" />
-                                                </div>
-                                            ))}
+                                                );
+                                            })}
                                         </div>
                                     )}
                                 </div>
@@ -751,3 +768,5 @@ export default function TicketDetail() {
         </div>
     );
 }
+// Helper Icon Component
+const ActivityIcon = ({ size }) => <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>;
