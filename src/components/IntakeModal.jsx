@@ -1,21 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Save, Search, User, Smartphone, FileText, Hash } from 'lucide-react';
+import { X, Save, Search, FileText, Smartphone, Hash, User, Mail, Phone, CheckCircle, AlertCircle } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { useToast } from '../context/ToastProvider';
 import { formatPhoneNumber } from '../utils';
 
-export default function IntakeModal({ isOpen, onClose, onSubmit }) {
+export default function IntakeModal({ isOpen, onClose, onTicketCreated, initialCustomer }) {
     const { addToast } = useToast();
     const [activeTab, setActiveTab] = useState('existing');
     const [searchTerm, setSearchTerm] = useState('');
     const [searchResults, setSearchResults] = useState([]);
     const [selectedCustomer, setSelectedCustomer] = useState(null);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     // Validation State
     const [errors, setErrors] = useState({});
     const [isShaking, setIsShaking] = useState(false);
 
-    // Refs for logic (Cooldowns & Timers)
+    // Refs
     const lastToastTime = useRef(0);
     const shakeTimeout = useRef(null);
 
@@ -29,17 +30,26 @@ export default function IntakeModal({ isOpen, onClose, onSubmit }) {
 
     useEffect(() => {
         if (isOpen) {
-            // Reset Everything
-            setSearchTerm('');
-            setSearchResults([]);
-            setSelectedCustomer(null);
-            setNewCustomer({ full_name: '', email: '', phone: '' });
-            setDevice({ brand: '', model: '', serial: '', description: '' });
+            // Reset Form
             setErrors({});
             setIsShaking(false);
+            setDevice({ brand: '', model: '', serial: '', description: '' });
             fetchCatalog();
+
+            // --- SMART PRE-FILL LOGIC ---
+            if (initialCustomer) {
+                setActiveTab('existing');
+                setSelectedCustomer(initialCustomer);
+                setSearchTerm(initialCustomer.full_name);
+                setSearchResults([]);
+            } else {
+                setActiveTab('existing');
+                setSearchTerm('');
+                setSelectedCustomer(null);
+                setNewCustomer({ full_name: '', email: '', phone: '' });
+            }
         }
-    }, [isOpen]);
+    }, [isOpen, initialCustomer]);
 
     async function fetchCatalog() {
         const { data } = await supabase.from('device_catalog').select('*');
@@ -64,7 +74,7 @@ export default function IntakeModal({ isOpen, onClose, onSubmit }) {
 
     useEffect(() => {
         const delayDebounceFn = setTimeout(async () => {
-            if (searchTerm.length > 2) {
+            if (searchTerm.length > 2 && !selectedCustomer) {
                 const { data } = await supabase
                     .from('customers')
                     .select('*')
@@ -76,276 +86,284 @@ export default function IntakeModal({ isOpen, onClose, onSubmit }) {
             }
         }, 300);
         return () => clearTimeout(delayDebounceFn);
-    }, [searchTerm]);
+    }, [searchTerm, selectedCustomer]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (isSubmitting) return;
 
-        // --- VALIDATION LOGIC ---
+        // --- VALIDATION ---
         const newErrors = {};
         let isValid = true;
 
-        // 1. Validate Customer Section
-        if (activeTab === 'existing') {
-            if (!selectedCustomer) {
-                newErrors.customerSearch = true;
-                isValid = false;
-            }
-        } else {
+        if (activeTab === 'existing' && !selectedCustomer) { newErrors.customerSearch = true; isValid = false; }
+        if (activeTab === 'new') {
             if (!newCustomer.full_name) { newErrors.new_name = true; isValid = false; }
             if (!newCustomer.phone) { newErrors.new_phone = true; isValid = false; }
         }
 
-        // 2. Validate Device Section
         if (!device.brand) { newErrors.brand = true; isValid = false; }
         if (!device.model) { newErrors.model = true; isValid = false; }
         if (!device.description) { newErrors.description = true; isValid = false; }
 
         if (!isValid) {
             setErrors(newErrors);
-
-            // --- 1. SHAKE LOGIC (Force Restart) ---
-            // Clear any existing timeout
-            if (shakeTimeout.current) clearTimeout(shakeTimeout.current);
-
-            // Turn it OFF instantly
             setIsShaking(false);
-
-            // Turn it ON after 10ms (Forces React to see a change and restart animation)
             setTimeout(() => {
                 setIsShaking(true);
-                // Schedule it to turn off automatically after the animation ends (500ms)
                 shakeTimeout.current = setTimeout(() => setIsShaking(false), 500);
             }, 10);
 
-
-            // --- 2. TOAST LOGIC (Anti-Spam) ---
             const now = Date.now();
-            // Only show toast if 3 seconds have passed since the last one
             if (now - lastToastTime.current > 3000) {
-                addToast("Please fill in the required fields marked in red.", "error");
+                addToast("Please check the required fields.", "error");
                 lastToastTime.current = now;
             }
-
             return;
         }
 
-        // --- SUBMISSION ---
-        const formData = {
-            customer_id: activeTab === 'existing' ? selectedCustomer.id : null,
-            full_name: activeTab === 'existing' ? selectedCustomer.full_name : newCustomer.full_name,
-            email: activeTab === 'existing' ? selectedCustomer.email : newCustomer.email,
-            phone: activeTab === 'existing' ? selectedCustomer.phone : newCustomer.phone,
-            brand: device.brand,
-            model: device.model,
-            serial: device.serial,
-            description: device.description
-        };
-        onSubmit(formData);
-        onClose();
-    };
+        setIsSubmitting(true);
 
-    // Helper to clear errors when user types
-    const clearError = (field) => {
-        if (errors[field]) {
-            setErrors(prev => ({ ...prev, [field]: false }));
+        try {
+            let customerId = selectedCustomer?.id;
+
+            // 1. Create New Customer if needed
+            if (activeTab === 'new') {
+                const { data: createdCust, error: custError } = await supabase
+                    .from('customers')
+                    .insert([{
+                        full_name: newCustomer.full_name,
+                        email: newCustomer.email,
+                        phone: newCustomer.phone
+                    }])
+                    .select()
+                    .single();
+
+                if (custError) throw custError;
+                customerId = createdCust.id;
+            }
+
+            // 2. Create Ticket
+            const { error: ticketError } = await supabase
+                .from('tickets')
+                .insert([{
+                    customer_id: customerId,
+                    brand: device.brand,
+                    model: device.model,
+                    serial_number: device.serial,
+                    description: device.description,
+                    status: 'intake',
+                    estimate_total: 0
+                }]);
+
+            if (ticketError) throw ticketError;
+
+            // Success!
+            addToast("Ticket created successfully!", "success");
+            if (onTicketCreated) onTicketCreated();
+            onClose();
+
+        } catch (error) {
+            console.error(error);
+            addToast("Failed to create ticket.", "error");
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
-    // Helper Class Logic: 
-    const getErrorClass = (field) => {
-        // If there is an error, show the RED border
-        // AND if isShaking is true, add the animation
-        if (!errors[field]) return '';
-        return `input-error ${isShaking ? 'animate-shake' : ''}`;
+    const clearError = (field) => {
+        if (errors[field]) setErrors(prev => ({ ...prev, [field]: false }));
     };
 
-    const getTextAreaErrorClass = (field) => {
-        if (!errors[field]) return '';
-        return `textarea-error ${isShaking ? 'animate-shake' : ''}`;
+    // Helper for initials
+    const getInitials = (name) => {
+        if (!name) return '??';
+        const parts = name.trim().split(' ');
+        if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+        return name.substring(0, 2).toUpperCase();
     };
+
+    const getErrorClass = (field) => (!errors[field] ? '' : `input-error ring-2 ring-red-100 ${isShaking ? 'animate-shake' : ''}`);
+    const getTextAreaErrorClass = (field) => (!errors[field] ? '' : `textarea-error ring-2 ring-red-100 ${isShaking ? 'animate-shake' : ''}`);
 
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade">
-            <div className="bg-[var(--bg-surface)] w-full max-w-2xl rounded-2xl shadow-2xl border border-[var(--border-color)] flex flex-col max-h-[90vh] overflow-hidden">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade">
+            <div className="bg-[var(--bg-surface)] w-full max-w-2xl rounded-2xl shadow-2xl border border-[var(--border-color)] flex flex-col max-h-[90vh] overflow-hidden animate-pop ring-1 ring-white/20">
 
-                {/* Header */}
-                <div className="p-5 border-b border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-subtle)]">
-                    <h2 className="text-xl font-black text-[var(--text-main)] flex items-center gap-2">
-                        <FileText size={20} className="text-primary" /> New Repair Ticket
-                    </h2>
-                    <button onClick={onClose} className="btn btn-sm btn-circle btn-ghost text-[var(--text-muted)] hover:bg-slate-200 dark:hover:bg-slate-700">
+                {/* HEADER */}
+                <div className="p-5 border-b border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-surface)]">
+                    <div>
+                        <h2 className="text-xl font-black text-[var(--text-main)] flex items-center gap-2 tracking-tight">
+                            <FileText size={22} className="text-indigo-600" /> New Repair Intake
+                        </h2>
+                        <p className="text-xs text-[var(--text-muted)] mt-1 font-medium pl-8">Enter customer and device details below</p>
+                    </div>
+                    <button onClick={onClose} className="btn btn-sm btn-circle btn-ghost text-[var(--text-muted)] hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
                         <X size={20} />
                     </button>
                 </div>
 
-                <div className="overflow-y-auto p-6 space-y-8">
+                <div className="overflow-y-auto p-6 space-y-8 bg-slate-50/50 dark:bg-slate-900/20">
 
-                    {/* SECTION 1: CUSTOMER */}
-                    <div>
-                        <div className="tabs tabs-boxed bg-[var(--bg-subtle)] p-1 mb-4 rounded-xl border border-[var(--border-color)]">
-                            <a className={`tab flex-1 rounded-lg font-bold transition-all ${activeTab === 'existing' ? 'bg-[var(--bg-surface)] shadow-sm text-primary' : 'text-[var(--text-muted)]'}`} onClick={() => { setActiveTab('existing'); setErrors({}); }}>Existing Customer</a>
-                            <a className={`tab flex-1 rounded-lg font-bold transition-all ${activeTab === 'new' ? 'bg-[var(--bg-surface)] shadow-sm text-primary' : 'text-[var(--text-muted)]'}`} onClick={() => { setActiveTab('new'); setErrors({}); }}>New Customer</a>
+                    {/* SECTION 1: CUSTOMER SELECTION */}
+                    <div className="bg-[var(--bg-surface)] p-5 rounded-xl border border-[var(--border-color)] shadow-sm">
+
+                        {/* Custom Segmented Control */}
+                        <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg mb-5">
+                            <button
+                                className={`flex-1 py-2 text-sm font-bold rounded-md transition-all flex items-center justify-center gap-2 ${activeTab === 'existing' ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                onClick={() => { setActiveTab('existing'); setErrors({}); }}
+                            >
+                                <Search size={14} /> Existing Customer
+                            </button>
+                            <button
+                                className={`flex-1 py-2 text-sm font-bold rounded-md transition-all flex items-center justify-center gap-2 ${activeTab === 'new' ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                onClick={() => { setActiveTab('new'); setErrors({}); }}
+                            >
+                                <User size={14} /> New Customer
+                            </button>
                         </div>
 
                         {activeTab === 'existing' ? (
                             <div className="relative">
-                                <div className="relative">
-                                    <Search className="absolute left-3 top-3.5 text-slate-400" size={18} />
-                                    <input
-                                        type="text"
-                                        placeholder="Search customer name or phone..."
-                                        className={`input input-bordered w-full pl-10 font-medium bg-[var(--bg-surface)] text-[var(--text-main)] ${getErrorClass('customerSearch')}`}
-                                        value={searchTerm}
-                                        onChange={(e) => {
-                                            setSearchTerm(e.target.value);
-                                            clearError('customerSearch');
-                                        }}
-                                    />
-                                </div>
+                                {/* Search Bar */}
+                                {!selectedCustomer && (
+                                    <div className="relative group">
+                                        <Search className="absolute left-3 top-3.5 text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={18} />
+                                        <input
+                                            type="text"
+                                            placeholder="Search by Name or Phone Number..."
+                                            className={`input input-bordered w-full pl-10 font-medium h-12 bg-white dark:bg-slate-800 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all ${getErrorClass('customerSearch')}`}
+                                            value={searchTerm}
+                                            onChange={(e) => {
+                                                setSearchTerm(e.target.value);
+                                                clearError('customerSearch');
+                                            }}
+                                            disabled={!!initialCustomer}
+                                        />
+                                    </div>
+                                )}
+
+                                {/* Auto-Complete Results */}
                                 {searchResults.length > 0 && !selectedCustomer && (
-                                    <ul className="absolute z-10 w-full mt-1 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl shadow-xl max-h-48 overflow-y-auto">
-                                        {searchResults.map(customer => {
-                                            const formatted = formatPhoneNumber(customer.phone || '');
-                                            const prefix = formatted.slice(0, -4);
-                                            const last4 = formatted.slice(-4);
-                                            return (
-                                                <li key={customer.id}
-                                                    className="p-3 hover:bg-[var(--bg-subtle)] cursor-pointer flex justify-between items-center border-b border-[var(--border-color)] last:border-0 transition-colors"
-                                                    onClick={() => {
-                                                        setSelectedCustomer(customer);
-                                                        setSearchTerm(customer.full_name);
-                                                        setSearchResults([]);
-                                                        clearError('customerSearch');
-                                                    }}
-                                                >
-                                                    <div className="flex flex-col">
-                                                        <span className="font-bold text-[var(--text-main)] text-sm">{customer.full_name}</span>
-                                                        <span className="text-xs text-[var(--text-muted)]">{customer.email}</span>
+                                    <ul className="absolute z-10 w-full mt-2 bg-white dark:bg-slate-800 border border-[var(--border-color)] rounded-xl shadow-xl max-h-56 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-700">
+                                        {searchResults.map(customer => (
+                                            <li key={customer.id}
+                                                className="p-3 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer flex justify-between items-center transition-colors group"
+                                                onClick={() => {
+                                                    setSelectedCustomer(customer);
+                                                    setSearchTerm(customer.full_name);
+                                                    setSearchResults([]);
+                                                    clearError('customerSearch');
+                                                }}
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-600 flex items-center justify-center text-xs font-bold text-slate-600 dark:text-slate-300">
+                                                        {getInitials(customer.full_name)}
                                                     </div>
-                                                    <div className="font-mono text-xs text-[var(--text-muted)] bg-[var(--bg-subtle)] px-2 py-1 rounded">
-                                                        {prefix}<span className="text-red-600 dark:text-red-400 font-black underline decoration-2 decoration-red-500 text-sm">{last4}</span>
+                                                    <div>
+                                                        <div className="font-bold text-[var(--text-main)] text-sm group-hover:text-indigo-600">{customer.full_name}</div>
+                                                        <div className="text-xs text-[var(--text-muted)]">{customer.email}</div>
                                                     </div>
-                                                </li>
-                                            );
-                                        })}
+                                                </div>
+                                                <div className="font-mono text-xs font-medium text-[var(--text-muted)] bg-slate-100 dark:bg-slate-900 px-2 py-1 rounded">
+                                                    {formatPhoneNumber(customer.phone)}
+                                                </div>
+                                            </li>
+                                        ))}
                                     </ul>
                                 )}
+
+                                {/* Selected Customer Card */}
                                 {selectedCustomer && (
-                                    <div className="mt-3 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl flex justify-between items-center animate-pop">
-                                        <div className="text-sm font-bold text-green-700 dark:text-green-400">✓ {selectedCustomer.full_name} selected</div>
-                                        <button onClick={() => { setSelectedCustomer(null); setSearchTerm('') }} className="text-xs text-red-500 font-bold hover:underline">Change</button>
+                                    <div className="bg-indigo-50/50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 rounded-xl p-4 flex items-center justify-between animate-pop">
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-12 h-12 rounded-full bg-indigo-100 dark:bg-indigo-900 text-indigo-600 dark:text-indigo-300 flex items-center justify-center text-lg font-black shadow-sm border border-indigo-200">
+                                                {getInitials(selectedCustomer.full_name)}
+                                            </div>
+                                            <div>
+                                                <div className="font-black text-slate-800 dark:text-white flex items-center gap-2">
+                                                    {selectedCustomer.full_name}
+                                                    <span className="badge badge-sm badge-success gap-1 text-white"><CheckCircle size={10} /> Verified</span>
+                                                </div>
+                                                <div className="text-xs text-slate-500 font-medium flex gap-3 mt-1">
+                                                    <span className="flex items-center gap-1"><Phone size={10} /> {formatPhoneNumber(selectedCustomer.phone)}</span>
+                                                    {selectedCustomer.email && <span className="flex items-center gap-1"><Mail size={10} /> {selectedCustomer.email}</span>}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {!initialCustomer && (
+                                            <button onClick={() => { setSelectedCustomer(null); setSearchTerm('') }} className="btn btn-sm btn-ghost text-red-500 hover:bg-red-50">Change</button>
+                                        )}
                                     </div>
                                 )}
                             </div>
                         ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <input
-                                    type="text"
-                                    placeholder="Full Name"
-                                    className={`input input-bordered w-full bg-[var(--bg-surface)] text-[var(--text-main)] ${getErrorClass('new_name')}`}
-                                    value={newCustomer.full_name}
-                                    onChange={e => {
-                                        setNewCustomer({ ...newCustomer, full_name: e.target.value });
-                                        clearError('new_name');
-                                    }}
-                                />
-                                <input
-                                    type="email"
-                                    placeholder="Email (Optional)"
-                                    className="input input-bordered w-full bg-[var(--bg-surface)] text-[var(--text-main)]"
-                                    value={newCustomer.email}
-                                    onChange={e => setNewCustomer({ ...newCustomer, email: e.target.value })}
-                                />
-                                <input
-                                    type="tel"
-                                    placeholder="Phone Number"
-                                    className={`input input-bordered w-full md:col-span-2 bg-[var(--bg-surface)] text-[var(--text-main)] ${getErrorClass('new_phone')}`}
-                                    value={newCustomer.phone}
-                                    onChange={e => {
-                                        setNewCustomer({ ...newCustomer, phone: e.target.value });
-                                        clearError('new_phone');
-                                    }}
-                                />
+                                <div className="form-control">
+                                    <label className="label text-xs font-bold uppercase text-slate-400 pb-1">Full Name</label>
+                                    <input type="text" placeholder="John Doe" className={`input input-bordered w-full font-medium bg-white dark:bg-slate-800 ${getErrorClass('new_name')}`} value={newCustomer.full_name} onChange={e => { setNewCustomer({ ...newCustomer, full_name: e.target.value }); clearError('new_name'); }} />
+                                </div>
+                                <div className="form-control">
+                                    <label className="label text-xs font-bold uppercase text-slate-400 pb-1">Email Address</label>
+                                    <input type="email" placeholder="john@example.com" className="input input-bordered w-full font-medium bg-white dark:bg-slate-800" value={newCustomer.email} onChange={e => setNewCustomer({ ...newCustomer, email: e.target.value })} />
+                                </div>
+                                <div className="form-control md:col-span-2">
+                                    <label className="label text-xs font-bold uppercase text-slate-400 pb-1">Phone Number</label>
+                                    <input type="tel" placeholder="(555) 123-4567" className={`input input-bordered w-full font-medium bg-white dark:bg-slate-800 ${getErrorClass('new_phone')}`} value={newCustomer.phone} onChange={e => { setNewCustomer({ ...newCustomer, phone: e.target.value }); clearError('new_phone'); }} />
+                                </div>
                             </div>
                         )}
                     </div>
 
                     {/* SECTION 2: DEVICE INFO */}
-                    <div>
-                        <h3 className="text-xs font-bold uppercase text-[var(--text-muted)] tracking-wider mb-3 flex items-center gap-2">
-                            <Smartphone size={16} /> Device Information
+                    <div className="bg-[var(--bg-surface)] p-5 rounded-xl border border-[var(--border-color)] shadow-sm">
+                        <h3 className="text-xs font-bold uppercase text-[var(--text-muted)] tracking-wider mb-4 flex items-center gap-2 border-b border-[var(--border-color)] pb-2">
+                            <Smartphone size={16} className="text-emerald-500" /> Device Information
                         </h3>
+
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-
                             <div className="form-control">
-                                <input
-                                    type="text"
-                                    list="brand-list"
-                                    placeholder="Brand (e.g. Dyson)"
-                                    className={`input input-bordered w-full font-bold bg-[var(--bg-surface)] text-[var(--text-main)] ${getErrorClass('brand')}`}
-                                    value={device.brand}
-                                    onChange={e => {
-                                        setDevice({ ...device, brand: e.target.value });
-                                        clearError('brand');
-                                    }}
-                                />
-                                <datalist id="brand-list">
-                                    {uniqueBrands.map(brand => (
-                                        <option key={brand} value={brand} />
-                                    ))}
-                                </datalist>
+                                <label className="label text-xs font-bold uppercase text-slate-400 pb-1">Brand</label>
+                                <input type="text" list="brand-list" placeholder="e.g. Dyson" className={`input input-bordered w-full font-bold bg-white dark:bg-slate-800 focus:border-emerald-500 ${getErrorClass('brand')}`} value={device.brand} onChange={e => { setDevice({ ...device, brand: e.target.value }); clearError('brand'); }} />
+                                <datalist id="brand-list">{uniqueBrands.map(brand => <option key={brand} value={brand} />)}</datalist>
                             </div>
-
                             <div className="form-control">
-                                <input
-                                    type="text"
-                                    list="model-list"
-                                    placeholder="Model (e.g. V11 Animal)"
-                                    className={`input input-bordered w-full font-bold bg-[var(--bg-surface)] text-[var(--text-main)] ${getErrorClass('model')}`}
-                                    value={device.model}
-                                    onChange={e => {
-                                        setDevice({ ...device, model: e.target.value });
-                                        clearError('model');
-                                    }}
-                                />
-                                <datalist id="model-list">
-                                    {filteredModels.map(model => (
-                                        <option key={model} value={model} />
-                                    ))}
-                                </datalist>
+                                <label className="label text-xs font-bold uppercase text-slate-400 pb-1">Model</label>
+                                <input type="text" list="model-list" placeholder="e.g. V11 Animal" className={`input input-bordered w-full font-bold bg-white dark:bg-slate-800 focus:border-emerald-500 ${getErrorClass('model')}`} value={device.model} onChange={e => { setDevice({ ...device, model: e.target.value }); clearError('model'); }} />
+                                <datalist id="model-list">{filteredModels.map(model => <option key={model} value={model} />)}</datalist>
                             </div>
-
-                            <div className="md:col-span-2 relative">
-                                <Hash className="absolute left-3 top-3.5 text-slate-400" size={16} />
-                                <input
-                                    type="text"
-                                    placeholder="Serial Number (Optional)"
-                                    className="input input-bordered w-full pl-10 font-mono text-sm bg-[var(--bg-surface)] text-[var(--text-main)]"
-                                    value={device.serial}
-                                    onChange={e => setDevice({ ...device, serial: e.target.value })}
-                                />
+                            <div className="md:col-span-2 relative form-control">
+                                <label className="label text-xs font-bold uppercase text-slate-400 pb-1">Serial Number</label>
+                                <div className="relative">
+                                    <Hash className="absolute left-3 top-3.5 text-slate-400" size={16} />
+                                    <input type="text" placeholder="Optional" className="input input-bordered w-full pl-10 font-mono text-sm bg-white dark:bg-slate-800 focus:border-emerald-500" value={device.serial} onChange={e => setDevice({ ...device, serial: e.target.value })} />
+                                </div>
                             </div>
                         </div>
-                        <textarea
-                            className={`textarea textarea-bordered w-full h-32 text-base leading-relaxed bg-[var(--bg-surface)] text-[var(--text-main)] ${getTextAreaErrorClass('description')}`}
-                            placeholder="Describe the issue... (e.g. Motor makes loud grinding noise)"
-                            value={device.description}
-                            onChange={e => {
-                                setDevice({ ...device, description: e.target.value });
-                                clearError('description');
-                            }}
-                        ></textarea>
+
+                        <div className="form-control">
+                            <label className="label text-xs font-bold uppercase text-slate-400 pb-1 flex justify-between">
+                                <span>Issue Description</span>
+                                {errors.description && <span className="text-red-500 flex items-center gap-1"><AlertCircle size={10} /> Required</span>}
+                            </label>
+                            <textarea
+                                className={`textarea textarea-bordered w-full h-32 text-base leading-relaxed bg-white dark:bg-slate-800 focus:border-emerald-500 ${getTextAreaErrorClass('description')}`}
+                                placeholder="Describe the issue... (e.g. Motor makes loud grinding noise)"
+                                value={device.description}
+                                onChange={e => { setDevice({ ...device, description: e.target.value }); clearError('description'); }}
+                            ></textarea>
+                        </div>
                     </div>
                 </div>
 
                 {/* Footer */}
-                <div className="p-5 border-t border-[var(--border-color)] bg-[var(--bg-subtle)] flex justify-end gap-3">
-                    <button onClick={onClose} className="btn btn-ghost text-[var(--text-muted)] hover:bg-slate-200 dark:hover:bg-slate-700">Cancel</button>
-                    <button onClick={handleSubmit} className="btn btn-gradient px-8 shadow-lg text-white font-bold tracking-wide">
-                        <Save size={18} /> Create Ticket
+                <div className="p-5 border-t border-[var(--border-color)] bg-[var(--bg-surface)] flex justify-end gap-3 z-10 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+                    <button onClick={onClose} className="btn btn-ghost font-bold text-[var(--text-muted)] hover:bg-slate-100 dark:hover:bg-slate-800">Cancel</button>
+                    <button onClick={handleSubmit} disabled={isSubmitting} className="btn btn-gradient px-8 shadow-lg text-white font-bold tracking-wide transition-transform active:scale-95">
+                        {isSubmitting ? <span className="loading loading-spinner"></span> : <><Save size={18} /> Create Ticket</>}
                     </button>
                 </div>
             </div>

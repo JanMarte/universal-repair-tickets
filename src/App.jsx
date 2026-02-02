@@ -14,6 +14,8 @@ import TicketDetail from './pages/TicketDetail';
 import CustomerHistory from './pages/CustomerHistory';
 import MyTickets from './pages/MyTickets';
 import Team from './pages/Team'; // <--- Added Team Page
+import Customers from './pages/Customers'; // <--- Added Customers Page
+
 
 function App() {
   const [session, setSession] = useState(null);
@@ -111,6 +113,11 @@ function App() {
           <Route
             path="/print/:id"
             element={session && isStaff ? <PrintLabel /> : <Navigate to="/" />}
+          />
+
+          <Route
+            path="/customers"
+            element={session && isStaff ? <Customers /> : <Navigate to="/" />}
           />
 
           {/* CUSTOMER HISTORY - Staff Only */}

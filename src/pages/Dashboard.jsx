@@ -96,38 +96,7 @@ export default function Dashboard() {
     return matchesSearch && matchesStatus;
   });
 
-  const handleCreateTicket = async (formData) => {
-    let customerId = formData.customer_id;
-
-    if (!customerId) {
-      const { data: newCust, error: custError } = await supabase
-        .from('customers')
-        .insert([{ full_name: formData.full_name, email: formData.email, phone: formData.phone }])
-        .select().single();
-
-      if (custError) { addToast("Error creating customer", "error"); return; }
-      customerId = newCust.id;
-    }
-
-    const { error } = await supabase.from('tickets').insert([{
-      customer_id: customerId,
-      customer_name: formData.full_name,
-      phone: formData.phone,
-      brand: formData.brand,
-      model: formData.model,
-      serial_number: formData.serial,
-      description: formData.description,
-      status: 'intake',
-      is_backordered: false
-    }]).select();
-
-    if (error) addToast("Error creating ticket", "error");
-    else {
-      addToast("Ticket created successfully!", "success");
-      setIsIntakeModalOpen(false);
-      fetchTickets();
-    }
-  };
+  // NOTE: handleCreateTicket REMOVED because IntakeModal now handles saving internally.
 
   const toggleTheme = () => {
     const newTheme = theme === 'light' ? 'dark' : 'light';
@@ -170,13 +139,22 @@ export default function Dashboard() {
         </div>
 
         <div className="flex-none flex items-center gap-2">
+
           <button className="btn btn-sm btn-circle btn-ghost text-[var(--text-main)]" onClick={() => setIsScanning(true)}><QrCode size={20} /></button>
+
+          {/* --- NEW BUTTON: CUSTOMERS CRM --- */}
+          <button className="btn btn-sm btn-ghost gap-2 text-[var(--text-main)] font-bold hidden md:flex" onClick={() => navigate('/customers')}>
+            <Users size={18} /> Customers
+          </button>
+
           <button className="btn btn-sm md:btn-md btn-gradient rounded-full shadow-lg border-none px-3 md:px-6" onClick={() => setIsIntakeModalOpen(true)}>
             <Plus size={18} strokeWidth={3} /> <span className="hidden md:inline font-bold">New Ticket</span>
           </button>
+
           <button className="btn btn-sm btn-ghost btn-circle text-[var(--text-main)]" onClick={toggleTheme}>
             {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
           </button>
+
           <div className="dropdown dropdown-end">
             <div tabIndex={0} role="button" className="btn btn-sm btn-ghost btn-circle avatar placeholder">
               <div className="bg-slate-800 text-white rounded-full w-8 md:w-9 shadow-lg">
@@ -362,7 +340,15 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <IntakeModal isOpen={isIntakeModalOpen} onClose={() => setIsIntakeModalOpen(false)} onSubmit={handleCreateTicket} />
+      {/* UPDATED MODAL USAGE:
+        Replaced `onSubmit` with `onTicketCreated={fetchTickets}` 
+        because the modal now saves to DB itself. 
+      */}
+      <IntakeModal
+        isOpen={isIntakeModalOpen}
+        onClose={() => setIsIntakeModalOpen(false)}
+        onTicketCreated={fetchTickets}
+      />
 
       {isScanning && (
         <QRScanner
