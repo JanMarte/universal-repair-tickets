@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { useNavigate } from 'react-router-dom';
 import { Search, User, Phone, Mail, ChevronRight, Users, ArrowLeft } from 'lucide-react';
-import { formatPhoneNumber } from '../utils';
+import { formatPhoneNumber, maskPhone, maskEmail } from '../utils'; // <--- UPDATED IMPORT
 
 export default function Customers() {
     const navigate = useNavigate();
@@ -118,16 +118,17 @@ export default function Customers() {
                                             </div>
                                         </div>
 
-                                        {/* Phone */}
+                                        {/* Phone (MASKED) */}
                                         <div className="flex items-center gap-2 text-sm font-medium text-[var(--text-muted)]">
                                             <Phone size={14} className="text-emerald-500" />
-                                            <span className="font-mono">{formatPhoneNumber(customer.phone)}</span>
+                                            {/* We use maskPhone here instead of formatPhoneNumber */}
+                                            <span className="font-mono tracking-widest">{maskPhone(customer.phone)}</span>
                                         </div>
 
-                                        {/* Email */}
+                                        {/* Email (MASKED) */}
                                         <div className="hidden md:flex items-center gap-2 text-sm font-medium text-[var(--text-muted)] truncate">
                                             <Mail size={14} className="text-blue-500 flex-none" />
-                                            <span className="truncate">{customer.email || 'No email on file'}</span>
+                                            <span className="truncate">{maskEmail(customer.email)}</span>
                                         </div>
                                     </div>
                                 </div>

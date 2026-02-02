@@ -4,22 +4,25 @@ import { format } from 'date-fns';
 import {
     User, Phone, Mail, Calendar,
     ArrowLeft, Plus, Clock, Wrench, DollarSign,
-    ChevronRight, History, Star, AlertCircle
+    ChevronRight, History, Star, AlertCircle, Eye, EyeOff
 } from 'lucide-react';
 
 import { supabase } from '../supabaseClient';
-import { formatPhoneNumber, formatCurrency } from '../utils';
-import IntakeModal from '../components/IntakeModal'; // <--- 1. NEW IMPORT
+import { formatPhoneNumber, formatCurrency, maskEmail, maskPhone } from '../utils';
+import IntakeModal from '../components/IntakeModal';
 
 export default function CustomerHistory() {
     const { id } = useParams();
     const navigate = useNavigate();
+
+    // Data State
     const [customer, setCustomer] = useState(null);
     const [tickets, setTickets] = useState([]);
     const [loading, setLoading] = useState(true);
 
-    // 2. NEW STATE FOR MODAL
+    // UI State
     const [isIntakeOpen, setIsIntakeOpen] = useState(false);
+    const [isPrivacyMode, setIsPrivacyMode] = useState(true); // Default to HIDDEN for security
 
     useEffect(() => {
         fetchData();
@@ -85,7 +88,7 @@ export default function CustomerHistory() {
                     </button>
                 </div>
                 <div className="flex-none">
-                    {/* 3. UPDATED BUTTON: Opens Modal instead of navigating */}
+                    {/* BUTTON: Opens Modal instead of navigating */}
                     <button onClick={() => setIsIntakeOpen(true)} className="btn btn-sm btn-gradient text-white gap-2 shadow-md">
                         <Plus size={16} /> New Repair
                     </button>
@@ -97,31 +100,51 @@ export default function CustomerHistory() {
                 <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-indigo-500/10 to-purple-500/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
 
                 <div className="flex flex-col md:flex-row gap-6 items-start md:items-center relative z-10">
+
+                    {/* AVATAR */}
                     <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-slate-800 to-slate-900 text-white flex items-center justify-center text-2xl font-black shadow-lg">
                         {getInitials(customer.full_name)}
                     </div>
-                    <div className="flex-1">
-                        <h1 className="text-3xl font-black text-[var(--text-main)] mb-2">
-                            {customer.full_name}
-                        </h1>
+
+                    {/* INFO SECTION */}
+                    <div className="flex-1 w-full">
+                        <div className="flex justify-between items-start">
+                            <h1 className="text-3xl font-black text-[var(--text-main)] mb-2">
+                                {customer.full_name}
+                            </h1>
+
+                            {/* PRIVACY TOGGLE BUTTON */}
+                            <button
+                                onClick={() => setIsPrivacyMode(!isPrivacyMode)}
+                                className="btn btn-sm btn-ghost gap-2 text-[var(--text-muted)] border border-[var(--border-color)] hover:bg-[var(--bg-subtle)]"
+                            >
+                                {isPrivacyMode ? <Eye size={16} /> : <EyeOff size={16} />}
+                                <span className="text-xs hidden sm:inline">{isPrivacyMode ? 'Show Info' : 'Hide Info'}</span>
+                            </button>
+                        </div>
+
                         <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm font-medium text-[var(--text-muted)]">
                             <div className="flex items-center gap-2">
-                                <Mail size={16} className="text-indigo-500" /> {customer.email || 'No email'}
+                                <Mail size={16} className="text-indigo-500" />
+                                {isPrivacyMode ? maskEmail(customer.email) : (customer.email || 'No email')}
                             </div>
                             <div className="flex items-center gap-2">
-                                <Phone size={16} className="text-emerald-500" /> {formatPhoneNumber(customer.phone)}
+                                <Phone size={16} className="text-emerald-500" />
+                                {isPrivacyMode ? maskPhone(customer.phone) : formatPhoneNumber(customer.phone)}
                             </div>
                             <div className="flex items-center gap-2">
                                 <Calendar size={16} className="text-amber-500" /> Member since {format(new Date(customer.created_at), 'MMM yyyy')}
                             </div>
                         </div>
                     </div>
-                    <div className="flex gap-4">
-                        <div className="text-center px-4 py-2 bg-[var(--bg-subtle)] rounded-xl border border-[var(--border-color)]">
+
+                    {/* STATS BADGES */}
+                    <div className="flex gap-4 w-full md:w-auto">
+                        <div className="text-center px-4 py-2 bg-[var(--bg-subtle)] rounded-xl border border-[var(--border-color)] flex-1 md:flex-none">
                             <div className="text-xs font-bold uppercase text-[var(--text-muted)] mb-1">Lifetime Spend</div>
                             <div className="text-xl font-black text-emerald-600">{formatCurrency(totalSpent)}</div>
                         </div>
-                        <div className="text-center px-4 py-2 bg-[var(--bg-subtle)] rounded-xl border border-[var(--border-color)]">
+                        <div className="text-center px-4 py-2 bg-[var(--bg-subtle)] rounded-xl border border-[var(--border-color)] flex-1 md:flex-none">
                             <div className="text-xs font-bold uppercase text-[var(--text-muted)] mb-1">Total Repairs</div>
                             <div className="text-xl font-black text-[var(--text-main)]">{tickets.length}</div>
                         </div>
@@ -131,6 +154,8 @@ export default function CustomerHistory() {
 
             {/* --- LAYOUT GRID --- */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+                {/* LEFT: TICKET HISTORY */}
                 <div className="lg:col-span-2 space-y-6">
                     <div className="flex items-center justify-between px-2">
                         <h2 className="text-sm font-black uppercase tracking-widest text-[var(--text-muted)] flex items-center gap-2">
@@ -154,9 +179,11 @@ export default function CustomerHistory() {
                                 >
                                     <div className="flex justify-between items-start">
                                         <div className="flex gap-4">
+                                            {/* Status Icon Box */}
                                             <div className="hidden sm:flex w-12 h-12 rounded-lg bg-[var(--bg-subtle)] items-center justify-center text-[var(--text-muted)] group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors">
                                                 <Wrench size={20} />
                                             </div>
+
                                             <div>
                                                 <div className="flex items-center gap-2 mb-1">
                                                     <span className="font-black text-lg text-[var(--text-main)] group-hover:text-indigo-600 transition-colors">
@@ -169,6 +196,7 @@ export default function CustomerHistory() {
                                                 <div className="text-sm text-[var(--text-muted)] font-mono mb-3">
                                                     Serial: {ticket.serial_number || 'N/A'}
                                                 </div>
+
                                                 <div className="flex items-center gap-3">
                                                     <span className={`badge border font-bold ${getStatusStyle(ticket.status)}`}>
                                                         {ticket.status.replace('_', ' ')}
@@ -179,6 +207,7 @@ export default function CustomerHistory() {
                                                 </div>
                                             </div>
                                         </div>
+
                                         <div className="text-right flex flex-col items-end gap-2">
                                             <div className="text-lg font-black text-[var(--text-main)]">
                                                 {formatCurrency(ticket.estimate_total)}
@@ -188,6 +217,8 @@ export default function CustomerHistory() {
                                             </div>
                                         </div>
                                     </div>
+
+                                    {/* Description Preview */}
                                     {ticket.description && (
                                         <div className="mt-4 pt-4 border-t border-[var(--border-color)]">
                                             <p className="text-xs text-[var(--text-muted)] line-clamp-2">
@@ -201,12 +232,15 @@ export default function CustomerHistory() {
                     )}
                 </div>
 
+                {/* RIGHT: CUSTOMER INSIGHTS */}
                 <div className="space-y-6">
                     <div className="bg-[var(--bg-surface)] rounded-xl border border-[var(--border-color)] p-6">
                         <h3 className="text-xs font-bold uppercase text-[var(--text-muted)] mb-4 flex items-center gap-2">
                             <Star size={16} /> Customer Insights
                         </h3>
+
                         <div className="space-y-4">
+                            {/* Insight 1: Avg Spend */}
                             <div className="flex items-start gap-3 p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg border border-indigo-100 dark:border-indigo-800">
                                 <DollarSign size={16} className="text-indigo-600 mt-0.5" />
                                 <div>
@@ -216,6 +250,8 @@ export default function CustomerHistory() {
                                     </div>
                                 </div>
                             </div>
+
+                            {/* Insight 2: Active Repairs */}
                             <div className="flex items-start gap-3 p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg border border-emerald-100 dark:border-emerald-800">
                                 <Wrench size={16} className="text-emerald-600 mt-0.5" />
                                 <div>
@@ -227,18 +263,21 @@ export default function CustomerHistory() {
                             </div>
                         </div>
                     </div>
+
+                    {/* Placeholder for future "Private Customer Notes" */}
                     <div className="border-2 border-dashed border-[var(--border-color)] rounded-xl flex flex-col items-center justify-center p-8 text-[var(--text-muted)] bg-[var(--bg-subtle)] opacity-70 hover:opacity-100 transition-opacity cursor-not-allowed">
                         <AlertCircle size={32} className="mb-2 opacity-50" />
                         <span className="font-bold text-sm uppercase tracking-wider">Private Notes</span>
                         <span className="text-xs opacity-70">Coming soon</span>
                     </div>
                 </div>
+
             </div>
 
             {/* 4. RENDER MODAL IF OPEN */}
             {isIntakeOpen && (
                 <IntakeModal
-                    isOpen={true}  // <--- THIS WAS MISSING
+                    isOpen={true}
                     onClose={() => setIsIntakeOpen(false)}
                     onTicketCreated={() => {
                         setIsIntakeOpen(false);

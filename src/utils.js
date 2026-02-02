@@ -27,3 +27,22 @@ export function formatCurrency(amount) {
         currency: 'USD',
     }).format(amount || 0);
 }
+
+export const maskEmail = (email) => {
+    if (!email) return '';
+    const [name, domain] = email.split('@');
+    if (!name || !domain) return email;
+    const maskedName = name.substring(0, 2) + '****';
+    return `${maskedName}@${domain}`;
+};
+
+export const maskPhone = (phone) => {
+    if (!phone) return '';
+    // Assumes a standard 10 digit number, keeps area code and last 4
+    const cleaned = ('' + phone).replace(/\D/g, '');
+    if (cleaned.length < 10) return '***-***-****';
+
+    const areaCode = cleaned.substring(0, 3);
+    const last4 = cleaned.substring(6, 10);
+    return `(${areaCode}) ***-${last4}`;
+};

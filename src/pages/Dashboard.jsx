@@ -19,7 +19,6 @@ export default function Dashboard() {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Store full user object to check ID for assignment
   const [currentUser, setCurrentUser] = useState({ id: null, email: '', role: '', initial: '?' });
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -41,7 +40,7 @@ export default function Dashboard() {
     if (user) {
       const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle();
       setCurrentUser({
-        id: user.id, // Needed for My Work filter
+        id: user.id,
         email: user.email,
         role: profile?.role || 'employee',
         initial: user.email.charAt(0).toUpperCase()
@@ -51,7 +50,6 @@ export default function Dashboard() {
 
   async function fetchTickets() {
     setLoading(true);
-    // Explicitly selecting columns ensures we get the new 'assigned_to' field
     const { data, error } = await supabase
       .from('tickets')
       .select('*, assigned_to')
@@ -80,11 +78,8 @@ export default function Dashboard() {
       (ticket.model || '').toLowerCase().includes(searchLower) ||
       (ticket.serial_number || '').toLowerCase().includes(searchLower);
 
-    // --- NEW FILTER LOGIC ---
     if (statusFilter === 'MY_WORK') {
-      // Ensure both IDs exist before comparing
       if (!currentUser.id || !ticket.assigned_to) return false;
-
       return matchesSearch &&
         ticket.assigned_to === currentUser.id &&
         ticket.status !== 'completed';
@@ -96,8 +91,6 @@ export default function Dashboard() {
     return matchesSearch && matchesStatus;
   });
 
-  // NOTE: handleCreateTicket REMOVED because IntakeModal now handles saving internally.
-
   const toggleTheme = () => {
     const newTheme = theme === 'light' ? 'dark' : 'light';
     setTheme(newTheme);
@@ -107,12 +100,9 @@ export default function Dashboard() {
     else document.documentElement.classList.remove('dark');
   };
 
-  // Stats Logic
   const activeCount = tickets.filter(t => t.status !== 'completed').length;
   const urgentCount = tickets.filter(t => t.is_backordered || t.status === 'waiting_parts').length;
   const totalRevenue = tickets.reduce((sum, t) => sum + (t.estimate_total || 0), 0);
-
-  // New Stat: My Work Count
   const myWorkCount = tickets.filter(t => t.assigned_to === currentUser.id && t.status !== 'completed').length;
 
   const getFilterBadgeColor = (filter) => {
@@ -142,7 +132,7 @@ export default function Dashboard() {
 
           <button className="btn btn-sm btn-circle btn-ghost text-[var(--text-main)]" onClick={() => setIsScanning(true)}><QrCode size={20} /></button>
 
-          {/* --- NEW BUTTON: CUSTOMERS CRM --- */}
+          {/* DESKTOP CUSTOMERS BUTTON (Hidden on Mobile) */}
           <button className="btn btn-sm btn-ghost gap-2 text-[var(--text-main)] font-bold hidden md:flex" onClick={() => navigate('/customers')}>
             <Users size={18} /> Customers
           </button>
@@ -171,9 +161,21 @@ export default function Dashboard() {
                   <span className="badge badge-sm badge-neutral uppercase font-bold text-[10px] text-white">{currentUser.role}</span>
                 </div>
               </li>
+
+              <div className="divider my-1"></div>
+
+              {/* --- NEW MOBILE LINKS --- */}
+              {/* This only shows up inside the dropdown, perfect for mobile access */}
+              <li>
+                <button onClick={() => navigate('/customers')} className="font-bold text-[var(--text-main)] md:hidden">
+                  <Users size={16} /> Customer Database
+                </button>
+              </li>
+
               {isManagement && (
                 <li><button onClick={() => navigate('/team')} className="font-bold text-indigo-600"><Users size={16} /> Manage Team</button></li>
               )}
+
               <div className="divider my-1"></div>
               <li><button onClick={handleLogout} className="text-red-600 font-bold"><LogOut size={16} /> Logout</button></li>
             </ul>
@@ -202,7 +204,7 @@ export default function Dashboard() {
               <select className="select select-bordered w-full font-bold shadow-sm" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
                 <option value="ALL">All Tickets</option>
                 <option value="ACTIVE">Active Workload</option>
-                <option value="MY_WORK">👤 My Repairs</option> {/* NEW OPTION */}
+                <option value="MY_WORK">👤 My Repairs</option>
                 <option value="ATTENTION">⚠️ Attention Needed</option>
                 <hr disabled />
                 <option value="intake">Intake</option>
@@ -248,7 +250,7 @@ export default function Dashboard() {
                 <select className="select select-bordered w-full font-bold shadow-sm" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
                   <option value="ALL">All Tickets</option>
                   <option value="ACTIVE">Active Workload</option>
-                  <option value="MY_WORK">👤 My Repairs</option> {/* NEW OPTION */}
+                  <option value="MY_WORK">👤 My Repairs</option>
                   <option value="ATTENTION">⚠️ Attention Needed</option>
                   <hr disabled />
                   <option value="intake">Intake</option>
@@ -276,7 +278,6 @@ export default function Dashboard() {
                   <div className="p-2 bg-emerald-100 dark:bg-emerald-900/20 rounded-full text-emerald-600"><Activity size={18} /></div>
                 </div>
 
-                {/* NEW STAT: MY WORK */}
                 <div onClick={() => setStatusFilter('MY_WORK')} className={`flex items-center justify-between p-3 -mx-3 rounded-lg cursor-pointer transition-all group ${statusFilter === 'MY_WORK' ? 'bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-100' : 'hover:bg-[var(--bg-subtle)] border border-transparent'}`}>
                   <div>
                     <div className="text-xs font-bold uppercase text-[var(--text-muted)] mb-1">My Repairs</div>
@@ -340,10 +341,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* UPDATED MODAL USAGE:
-        Replaced `onSubmit` with `onTicketCreated={fetchTickets}` 
-        because the modal now saves to DB itself. 
-      */}
       <IntakeModal
         isOpen={isIntakeModalOpen}
         onClose={() => setIsIntakeModalOpen(false)}
