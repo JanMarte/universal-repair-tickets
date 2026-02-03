@@ -5,7 +5,8 @@ import IntakeModal from '../components/IntakeModal';
 import { useNavigate } from 'react-router-dom';
 import {
   Search, Filter, Moon, Sun, Plus, XCircle, LogOut, Users, QrCode,
-  AlertTriangle, DollarSign, Activity, ChevronDown, ChevronUp, Layers, UserCheck
+  AlertTriangle, DollarSign, Activity, ChevronDown, ChevronUp, Layers, UserCheck,
+  Package // <--- 1. ADDED MISSING IMPORT
 } from 'lucide-react';
 import { useToast } from '../context/ToastProvider';
 import QRScanner from '../components/QRScanner';
@@ -132,9 +133,13 @@ export default function Dashboard() {
 
           <button className="btn btn-sm btn-circle btn-ghost text-[var(--text-main)]" onClick={() => setIsScanning(true)}><QrCode size={20} /></button>
 
-          {/* DESKTOP CUSTOMERS BUTTON (Hidden on Mobile) */}
+          {/* DESKTOP NAV BUTTONS */}
           <button className="btn btn-sm btn-ghost gap-2 text-[var(--text-main)] font-bold hidden md:flex" onClick={() => navigate('/customers')}>
             <Users size={18} /> Customers
+          </button>
+
+          <button className="btn btn-sm btn-ghost gap-2 text-[var(--text-main)] font-bold hidden md:flex" onClick={() => navigate('/inventory')}>
+            <Package size={18} /> Inventory
           </button>
 
           <button className="btn btn-sm md:btn-md btn-gradient rounded-full shadow-lg border-none px-3 md:px-6" onClick={() => setIsIntakeModalOpen(true)}>
@@ -164,11 +169,17 @@ export default function Dashboard() {
 
               <div className="divider my-1"></div>
 
-              {/* --- NEW MOBILE LINKS --- */}
-              {/* This only shows up inside the dropdown, perfect for mobile access */}
+              {/* --- MOBILE LINKS --- */}
               <li>
                 <button onClick={() => navigate('/customers')} className="font-bold text-[var(--text-main)] md:hidden">
                   <Users size={16} /> Customer Database
+                </button>
+              </li>
+
+              {/* 2. ADDED INVENTORY MOBILE LINK */}
+              <li>
+                <button onClick={() => navigate('/inventory')} className="font-bold text-[var(--text-main)] md:hidden">
+                  <Package size={16} /> Inventory
                 </button>
               </li>
 
@@ -250,7 +261,7 @@ export default function Dashboard() {
                 <select className="select select-bordered w-full font-bold shadow-sm" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
                   <option value="ALL">All Tickets</option>
                   <option value="ACTIVE">Active Workload</option>
-                  <option value="MY_WORK">👤 My Repairs</option>
+                  <option value="MY_WORK">👤 My Repairs</option> {/* NEW OPTION */}
                   <option value="ATTENTION">⚠️ Attention Needed</option>
                   <hr disabled />
                   <option value="intake">Intake</option>
@@ -278,6 +289,7 @@ export default function Dashboard() {
                   <div className="p-2 bg-emerald-100 dark:bg-emerald-900/20 rounded-full text-emerald-600"><Activity size={18} /></div>
                 </div>
 
+                {/* NEW STAT: MY WORK */}
                 <div onClick={() => setStatusFilter('MY_WORK')} className={`flex items-center justify-between p-3 -mx-3 rounded-lg cursor-pointer transition-all group ${statusFilter === 'MY_WORK' ? 'bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-100' : 'hover:bg-[var(--bg-subtle)] border border-transparent'}`}>
                   <div>
                     <div className="text-xs font-bold uppercase text-[var(--text-muted)] mb-1">My Repairs</div>

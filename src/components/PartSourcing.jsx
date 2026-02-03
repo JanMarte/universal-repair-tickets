@@ -1,30 +1,37 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
-import { Search, Package, ShoppingCart, ExternalLink, Box, ShoppingBag, ChevronDown, ChevronUp } from 'lucide-react';
+import {
+    Search, Package, ShoppingCart, ExternalLink, Box,
+    ShoppingBag, ChevronDown, ChevronUp, Plus, Check,
+    QrCode, Wrench
+} from 'lucide-react';
+import { useToast } from '../context/ToastProvider';
+import QRScanner from './QRScanner';
 
-// NEW PROP: ticketId (Needed to save unique search history per ticket)
-export default function PartSourcing({ initialQuery = '', ticketId }) {
+export default function PartSourcing({ initialQuery = '', ticketId, onAddToEstimate }) {
+    const { addToast } = useToast();
     const [searchTerm, setSearchTerm] = useState('');
     const [internalResults, setInternalResults] = useState([]);
     const [loading, setLoading] = useState(false);
 
-    // UI State: Collapsed by default
+    // UI State
     const [isExpanded, setIsExpanded] = useState(false);
+    const [justAddedId, setJustAddedId] = useState(null);
+    const [isScanning, setIsScanning] = useState(false);
 
     // --- MEMORY LOGIC ---
     useEffect(() => {
-        // 1. Try to find a saved search for THIS specific ticket
         const savedSearch = localStorage.getItem(`part_search_${ticketId}`);
-
         if (savedSearch) {
             setSearchTerm(savedSearch);
-            performSearch(savedSearch); // Auto-run the saved search
+            performSearch(savedSearch);
         } else if (initialQuery) {
             setSearchTerm(initialQuery);
-            performSearch(initialQuery); // Auto-run the default
+            performSearch(initialQuery);
         }
     }, [ticketId, initialQuery]);
 
+    // --- SEARCH LOGIC (Name OR SKU) ---
     const performSearch = async (term) => {
         if (!term || !term.trim()) return;
         setLoading(true);
@@ -32,7 +39,7 @@ export default function PartSourcing({ initialQuery = '', ticketId }) {
         const { data, error } = await supabase
             .from('inventory')
             .select('*')
-            .ilike('name', `%${term}%`);
+            .or(`name.ilike.%${term}%,sku.ilike.%${term}%`);
 
         if (!error) setInternalResults(data || []);
         setLoading(false);
@@ -40,17 +47,67 @@ export default function PartSourcing({ initialQuery = '', ticketId }) {
 
     const handleSearchSubmit = (e) => {
         e.preventDefault();
-        // Save to memory when you explicitly search
         localStorage.setItem(`part_search_${ticketId}`, searchTerm);
         performSearch(searchTerm);
     };
 
-    // --- VENDOR CONFIGURATION (Updated for Dark Mode Contrast) ---
+    const handleScan = (code) => {
+        setIsScanning(false);
+        setSearchTerm(code);
+        performSearch(code);
+        addToast("Barcode scanned", "success");
+    };
+
+    // --- ADD TO TICKET & SUBTRACT STOCK ---
+    const handleAddPart = async (part) => {
+        if (!ticketId) return;
+
+        // 1. Add to Bill (WITH INVENTORY LINK)
+        const { error: estimateError } = await supabase.from('estimate_items').insert([{
+            ticket_id: ticketId,
+            description: part.name,
+            part_cost: part.price,
+            labor_cost: 0,
+            // Track where it came from so we can restock it later if deleted
+            inventory_id: part.id,
+            sku: part.sku,
+            bin_location: part.bin_location,
+            manufacturer: part.manufacturer
+        }]);
+
+        if (estimateError) {
+            console.error(estimateError);
+            addToast("Failed to add part to bill", "error");
+            return;
+        }
+
+        // 2. Subtract from Stock
+        const newQuantity = Math.max(0, part.quantity - 1);
+        const { error: stockError } = await supabase
+            .from('inventory')
+            .update({ quantity: newQuantity })
+            .eq('id', part.id);
+
+        if (stockError) {
+            console.error("Stock update failed", stockError);
+            addToast("Added to bill, but stock update failed", "warning");
+        } else {
+            // 3. Update UI Instantly
+            setInternalResults(prev => prev.map(item =>
+                item.id === part.id ? { ...item, quantity: newQuantity } : item
+            ));
+
+            setJustAddedId(part.id);
+            setTimeout(() => setJustAddedId(null), 2000);
+
+            if (onAddToEstimate) onAddToEstimate();
+            addToast(`Added ${part.name} & updated stock`, "success");
+        }
+    };
+
     const vendors = [
         {
             name: 'Amazon',
-            // Light Mode: Amber-50 bg, Dark Amber Text
-            // Dark Mode: Amber-900/20 bg, Bright Amber Text
             color: 'hover:bg-amber-50 hover:border-amber-500 text-amber-700 dark:text-amber-400 dark:hover:bg-amber-900/20 dark:hover:border-amber-500/50',
             icon: <ShoppingBag size={20} />,
             getUrl: (q) => `https://www.amazon.com/s?k=${encodeURIComponent(q)}&i=tools`
@@ -70,7 +127,7 @@ export default function PartSourcing({ initialQuery = '', ticketId }) {
         {
             name: 'Parts Warehouse',
             color: 'hover:bg-red-50 hover:border-red-500 text-red-700 dark:text-red-400 dark:hover:bg-red-900/20 dark:hover:border-red-500/50',
-            icon: <WrenchIcon />,
+            icon: <Wrench size={20} />,
             getUrl: (q) => `https://www.partswarehouse.com/searchresults.asp?Search=${encodeURIComponent(q)}`
         },
         {
@@ -84,18 +141,16 @@ export default function PartSourcing({ initialQuery = '', ticketId }) {
     return (
         <div className="bg-[var(--bg-surface)] rounded-xl border border-[var(--border-color)] overflow-hidden shadow-sm mt-6 animate-fade-in-up transition-all">
 
-            {/* COLLAPSIBLE HEADER */}
+            {/* --- UPDATED HEADER BACKGROUND --- */}
             <div
                 onClick={() => setIsExpanded(!isExpanded)}
-                className="bg-[var(--bg-subtle)] px-6 py-4 border-b border-[var(--border-color)] flex justify-between items-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                className="bg-slate-50 dark:bg-slate-800/50 px-6 py-4 border-b border-[var(--border-color)] flex justify-between items-center cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
             >
                 <div className="flex items-center gap-2">
                     <Search size={16} className="text-[var(--text-muted)]" />
                     <h2 className="text-xs font-bold uppercase text-[var(--text-muted)] tracking-widest">
                         Unified Part Search
                     </h2>
-
-                    {/* UPDATED BADGE: High contrast for Light Mode readability */}
                     {!isExpanded && searchTerm && (
                         <span className="ml-2 px-2 py-0.5 rounded-md bg-white border border-indigo-200 text-indigo-700 dark:bg-indigo-900/40 dark:border-indigo-700 dark:text-indigo-200 text-xs font-bold shadow-sm">
                             "{searchTerm}"
@@ -110,14 +165,26 @@ export default function PartSourcing({ initialQuery = '', ticketId }) {
             {/* EXPANDABLE CONTENT AREA */}
             {isExpanded && (
                 <div className="p-6 animate-slide-down">
-                    <form onSubmit={handleSearchSubmit} className="flex gap-2 mb-8">
-                        <input
-                            type="text"
-                            placeholder="Enter part name or number..."
-                            className="input input-bordered flex-1 bg-[var(--bg-surface)] text-[var(--text-main)] font-bold text-lg focus:border-indigo-500"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                        />
+
+                    {/* SEARCH INPUT */}
+                    <form onSubmit={handleSearchSubmit} className="flex gap-2 mb-8 relative">
+                        <div className="relative flex-1">
+                            <input
+                                type="text"
+                                placeholder="Enter part name or scan barcode..."
+                                className="input input-bordered w-full pl-4 pr-12 bg-[var(--bg-surface)] text-[var(--text-main)] font-bold text-lg focus:border-indigo-500"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setIsScanning(true)}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 btn btn-sm btn-ghost btn-circle text-[var(--text-muted)] hover:text-indigo-600"
+                                title="Scan Barcode"
+                            >
+                                <QrCode size={20} />
+                            </button>
+                        </div>
                         <button type="submit" className="btn btn-gradient text-white px-8">
                             {loading ? <span className="loading loading-spinner"></span> : 'Find Part'}
                         </button>
@@ -136,14 +203,28 @@ export default function PartSourcing({ initialQuery = '', ticketId }) {
                                 {internalResults.length > 0 ? (
                                     <div className="space-y-2">
                                         {internalResults.map(item => (
-                                            <div key={item.id} className="p-3 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg flex justify-between items-center shadow-sm">
+                                            <div key={item.id} className="p-3 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg flex justify-between items-center shadow-sm group">
                                                 <div>
                                                     <div className="font-bold text-[var(--text-main)]">{item.name}</div>
-                                                    <div className="text-xs text-[var(--text-muted)]">Bin: {item.bin_location || 'N/A'} • SKU: {item.sku}</div>
+                                                    <div className="text-xs text-[var(--text-muted)] flex gap-2 mt-1">
+                                                        <span className="bg-slate-100 dark:bg-slate-800 px-1.5 rounded text-[var(--text-main)] border border-[var(--border-color)]">Bin: {item.bin_location || 'N/A'}</span>
+                                                        <span className="font-mono opacity-75">{item.sku}</span>
+                                                    </div>
                                                 </div>
-                                                <div className="text-right">
-                                                    <div className="font-black text-emerald-600">{item.quantity} Left</div>
-                                                    <div className="text-xs font-bold">${item.price}</div>
+                                                <div className="text-right flex items-center gap-3">
+                                                    <div>
+                                                        <div className={`font-black ${item.quantity > 0 ? 'text-emerald-600' : 'text-red-500'}`}>{item.quantity > 0 ? `${item.quantity} Left` : 'Out of Stock'}</div>
+                                                        <div className="text-xs font-bold text-[var(--text-main)]">${item.price}</div>
+                                                    </div>
+
+                                                    {/* ADD BUTTON */}
+                                                    <button
+                                                        onClick={() => handleAddPart(item)}
+                                                        className={`btn btn-sm btn-circle ${justAddedId === item.id ? 'btn-success text-white' : 'btn-ghost border border-[var(--border-color)]'}`}
+                                                        disabled={justAddedId === item.id || item.quantity < 1}
+                                                    >
+                                                        {justAddedId === item.id ? <Check size={16} /> : <Plus size={16} />}
+                                                    </button>
                                                 </div>
                                             </div>
                                         ))}
@@ -151,7 +232,7 @@ export default function PartSourcing({ initialQuery = '', ticketId }) {
                                 ) : (
                                     <div className="h-full flex flex-col items-center justify-center text-[var(--text-muted)] opacity-60 min-h-[140px]">
                                         <Box size={32} className="mb-2" />
-                                        <span className="text-sm font-medium">No internal stock found.</span>
+                                        <span className="text-sm font-medium">No matches found in inventory.</span>
                                     </div>
                                 )}
                             </div>
@@ -190,10 +271,11 @@ export default function PartSourcing({ initialQuery = '', ticketId }) {
                     </div>
                 </div>
             )}
+
+            {/* SCANNER OVERLAY */}
+            {isScanning && (
+                <QRScanner onClose={() => setIsScanning(false)} onScan={handleScan} />
+            )}
         </div>
     );
 }
-
-const WrenchIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" /></svg>
-);

@@ -4,7 +4,8 @@ import { useReactToPrint } from 'react-to-print';
 import { format } from 'date-fns';
 import {
     ArrowLeft, Send, MessageSquare, Lock, Globe,
-    AlertTriangle, Save, X, Edit3, Printer, Calendar, User, Phone, Hash, Wrench, AlertCircle, FileText, History, Moon, Sun, QrCode, Clock, Eye, ShieldAlert, Laptop, PlusCircle, CheckCircle, LockKeyhole, DollarSign, PenTool, Truck
+    AlertTriangle, Save, X, Edit3, Printer, Calendar, User, Phone, Hash, Wrench, AlertCircle, FileText, History, Moon, Sun, QrCode, Clock, Eye, ShieldAlert, Laptop, PlusCircle, CheckCircle, LockKeyhole, DollarSign, PenTool, Truck,
+    Trash2, Tag, ClipboardList, Fingerprint, Cpu
 } from 'lucide-react';
 
 import { supabase } from '../supabaseClient';
@@ -28,6 +29,7 @@ export default function TicketDetail() {
     const [employees, setEmployees] = useState([]);
     const [loading, setLoading] = useState(true);
     const [estimateRefreshTrigger, setEstimateRefreshTrigger] = useState(0);
+    const isLoadedRef = useRef(false); // Safety lock
 
     // User State
     const [currentUser, setCurrentUser] = useState(null);
@@ -40,6 +42,7 @@ export default function TicketDetail() {
     const [activeTab, setActiveTab] = useState('public');
     const [isSending, setIsSending] = useState(false);
     const [selectedLog, setSelectedLog] = useState(null);
+    const [logToDelete, setLogToDelete] = useState(null); // Controls the delete modal
 
     // Mobile & Theme
     const [isMobileChatOpen, setIsMobileChatOpen] = useState(false);
@@ -112,6 +115,7 @@ export default function TicketDetail() {
         setAuditLogs(logs || []);
 
         setLoading(false);
+        setTimeout(() => { isLoadedRef.current = true; }, 1000); // Wait 1 second before allowing updates
     }
 
     const getHumanReadableDevice = (userAgent) => {
@@ -193,17 +197,56 @@ export default function TicketDetail() {
     };
 
     const handleEstimateUpdate = async (newTotal) => {
-        if (ticket?.estimate_total !== newTotal) {
-            const { error } = await supabase.from('tickets').update({ estimate_total: newTotal }).eq('id', id);
+        // 1. HARD STOP if we are still initializing (prevents refresh loops)
+        if (loading || !ticket || !isLoadedRef.current) return;
+
+        // 2. Strict Number Comparison to avoid "150.00" != 150 errors
+        const currentTotal = parseFloat(ticket.estimate_total || 0).toFixed(2);
+        const incomingTotal = parseFloat(newTotal || 0).toFixed(2);
+
+        // 3. Only update if the value is GENUINELY different
+        if (currentTotal !== incomingTotal) {
+            console.log(`Updating Estimate: Old (${currentTotal}) vs New (${incomingTotal})`);
+
+            const { error } = await supabase
+                .from('tickets')
+                .update({ estimate_total: incomingTotal })
+                .eq('id', id);
+
             if (!error) {
-                setTicket(prev => ({ ...prev, estimate_total: newTotal }));
-                logAudit('ESTIMATE CHANGE', `Updated estimate total to $${newTotal}`);
+                setTicket(prev => ({ ...prev, estimate_total: incomingTotal }));
+                logAudit('ESTIMATE CHANGE', `Updated total to $${incomingTotal}`);
             }
         }
     };
 
     const handleEstimateLog = (action, details) => {
         logAudit(action, details);
+    };
+
+    // 1. Just opens the modal (doesn't delete yet)
+    const promptDeleteLog = (log, e) => {
+        e.stopPropagation(); // Stop clicking the row
+        setLogToDelete(log);
+    };
+
+    // 2. Actually deletes (Run when clicking "Yes" in modal)
+    const executeDeleteLog = async () => {
+        if (!logToDelete) return;
+
+        const { error } = await supabase.from('audit_logs').delete().eq('id', logToDelete.id);
+
+        if (error) {
+            addToast("Failed to delete log", "error");
+        } else {
+            addToast("Log entry deleted forever", "success");
+            // Remove from list
+            setAuditLogs(prev => prev.filter(log => log.id !== logToDelete.id));
+            // Close details if open
+            if (selectedLog?.id === logToDelete.id) setSelectedLog(null);
+        }
+        // Close modal
+        setLogToDelete(null);
     };
 
     const handleAssignment = async (assigneeId) => {
@@ -489,101 +532,259 @@ export default function TicketDetail() {
             {/* MAIN LAYOUT */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade">
                 <div className="col-span-1 lg:col-span-2 space-y-6">
-                    <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl shadow-sm overflow-hidden">
-                        <div className="bg-[var(--bg-subtle)] px-6 py-4 border-b border-[var(--border-color)] flex justify-between items-center">
-                            <h2 className="text-xs font-bold uppercase text-[var(--text-muted)] tracking-widest flex items-center gap-2"><Wrench size={16} /> Diagnosis & Notes</h2>
-                            {canEdit && (userRole === 'manager' || userRole === 'admin') && (
-                                <button onClick={() => setIsEditModalOpen(true)} className="btn btn-sm btn-ghost gap-2 text-indigo-500"><Edit3 size={16} /> <span className="font-bold">Edit Details</span></button>
-                            )}
-                        </div>
-                        <div className="p-6">
+                    <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-2xl shadow-sm overflow-hidden animate-fade-in relative group">
 
-                            {/* --- UPDATED: CLEANER CUSTOMER REPORT BOX --- */}
-                            <div className="bg-slate-50 dark:bg-slate-800/50 p-5 rounded-r-xl rounded-bl-xl border-l-4 border-l-indigo-500 border-y border-r border-slate-200 dark:border-slate-700 mb-6 shadow-sm">
-                                <h3 className="text-xs font-bold uppercase text-indigo-600 dark:text-indigo-400 mb-2 flex items-center gap-2"><AlertCircle size={14} /> Customer Reported Issue</h3>
-                                <p className="text-slate-800 dark:text-slate-100 whitespace-pre-wrap font-medium leading-relaxed">{ticket.description || "No description provided."}</p>
+                        {/* DECORATIVE TOP ACCENT */}
+                        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500 opacity-50"></div>
+
+                        {/* --- HEADER --- */}
+                        <div className="px-6 py-5 border-b border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-subtle)]">
+                            <div>
+                                <h2 className="text-sm font-black uppercase text-[var(--text-main)] tracking-widest flex items-center gap-2">
+                                    <ClipboardList size={18} className="text-indigo-600" /> Technical Diagnosis
+                                </h2>
+                                <p className="text-[10px] font-bold text-[var(--text-muted)] mt-0.5 ml-7">
+                                    Case File #{ticket.id} • Opened {format(new Date(ticket.created_at), 'MMM dd, yyyy')}
+                                </p>
                             </div>
 
-                            {isStaff && (
-                                <>
-                                    <div className={`mt-8 p-4 rounded-xl border-2 transition-all duration-300 ${ticket.is_backordered ? 'border-red-500 bg-red-50 dark:bg-red-900/10' : 'border-[var(--border-color)] bg-[var(--bg-subtle)]'}`}>
-                                        <div className="flex items-center justify-between">
-                                            <div>
-                                                <h4 className={`font-bold flex items-center gap-2 ${ticket.is_backordered ? 'text-red-600' : 'text-[var(--text-main)]'}`}>{ticket.is_backordered ? <AlertTriangle size={18} /> : <AlertCircle size={18} />} Vendor Backorder Alert</h4>
-                                            </div>
-                                            <button
-                                                onClick={toggleBackorder}
-                                                disabled={!canEdit}
-                                                className={`w-14 h-7 rounded-full transition-colors relative shadow-inner ${ticket.is_backordered ? 'bg-red-500' : 'bg-slate-300 dark:bg-slate-600'} ${!canEdit ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                            >
-                                                <div className={`w-5 h-5 bg-white rounded-full absolute top-1 shadow-md transition-transform duration-200 ${ticket.is_backordered ? 'left-8' : 'left-1'}`} />
-                                            </button>
+                            {/* Edit Button (Only Management) */}
+                            {canEdit && (userRole === 'manager' || userRole === 'admin') && (
+                                <button
+                                    onClick={() => setIsEditModalOpen(true)}
+                                    className="btn btn-sm btn-ghost gap-2 text-[var(--text-muted)] hover:text-indigo-600 hover:bg-[var(--bg-surface)] border border-transparent hover:border-[var(--border-color)] transition-all"
+                                >
+                                    <Edit3 size={14} />
+                                    <span className="hidden sm:inline font-bold">Edit Specs</span>
+                                </button>
+                            )}
+                        </div>
+
+                        <div className="p-6 md:p-8">
+
+                            {/* --- DEVICE FINGERPRINT STRIP --- */}
+                            <div className="flex flex-wrap gap-4 mb-8">
+                                <div className="flex items-center gap-3 px-4 py-2 bg-[var(--bg-subtle)] rounded-lg border border-[var(--border-color)]">
+                                    <div className="p-1.5 bg-white dark:bg-slate-700 rounded-md shadow-sm">
+                                        <Cpu size={16} className="text-slate-500" />
+                                    </div>
+                                    <div>
+                                        <div className="text-[9px] font-black uppercase text-[var(--text-muted)] tracking-wider">Model ID</div>
+                                        <div className="text-sm font-bold text-[var(--text-main)]">{ticket.model}</div>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-3 px-4 py-2 bg-[var(--bg-subtle)] rounded-lg border border-[var(--border-color)]">
+                                    <div className="p-1.5 bg-white dark:bg-slate-700 rounded-md shadow-sm">
+                                        <Fingerprint size={16} className="text-slate-500" />
+                                    </div>
+                                    <div>
+                                        <div className="text-[9px] font-black uppercase text-[var(--text-muted)] tracking-wider">Serial / IMEI</div>
+                                        <div className="text-sm font-mono font-bold text-[var(--text-main)] tracking-wide">
+                                            {ticket.serial_number || 'N/A'}
                                         </div>
                                     </div>
-                                    <div className={`animate-fade-in-up mt-8 border-t border-[var(--border-color)] pt-6 ${isClosed ? 'pointer-events-none opacity-75' : ''}`}>
-                                        <EstimateBuilder ticketId={id} onTotalChange={handleEstimateUpdate} onActivityLog={handleEstimateLog} refreshTrigger={estimateRefreshTrigger} />
-                                        <PartsOrderManager ticketId={id} onActivityLog={handleEstimateLog} onAddToEstimate={() => setEstimateRefreshTrigger(prev => prev + 1)} />
-                                        <PartSourcing initialQuery={`${ticket.brand} ${ticket.model}`} ticketId={id} />
+                                </div>
+                            </div>
+
+                            {/* --- INTAKE REPORT (CUSTOMER ISSUE) --- */}
+                            <div className="relative mb-10">
+                                <div className="absolute -left-3 top-0 bottom-0 w-1 bg-[var(--border-color)] rounded-full"></div>
+                                <div className="pl-6">
+                                    <h3 className="text-xs font-bold uppercase text-[var(--text-muted)] mb-3 flex items-center gap-2">
+                                        <AlertCircle size={14} className="text-orange-500" /> Customer Stated Defect
+                                    </h3>
+                                    <div className="p-5 rounded-xl bg-[var(--bg-subtle)] border border-[var(--border-color)] text-[var(--text-main)] font-medium leading-relaxed whitespace-pre-wrap shadow-inner relative overflow-hidden">
+                                        {/* Quotation Mark Decoration */}
+                                        <div className="absolute top-2 right-4 text-6xl font-serif text-[var(--border-color)] opacity-50 pointer-events-none">”</div>
+                                        {ticket.description || "No description provided at intake."}
                                     </div>
-                                </>
+                                </div>
+                            </div>
+
+                            {/* --- SERVICE CONTROL CENTER (THE PART YOU LIKED) --- */}
+                            {isStaff && (
+                                <div className="mt-10 animate-fade-in-up">
+
+                                    {/* SECTION DIVIDER */}
+                                    <div className="relative flex items-center gap-4 mb-6">
+                                        <div className="h-px bg-[var(--border-color)] flex-1"></div>
+                                        <span className="text-[10px] font-black uppercase text-[var(--text-muted)] tracking-widest flex items-center gap-2 bg-[var(--bg-surface)] px-2">
+                                            <Wrench size={12} /> Service Control Center
+                                        </span>
+                                        <div className="h-px bg-[var(--border-color)] flex-1"></div>
+                                    </div>
+
+                                    {/* PREMIUM WORKSPACE CONTAINER */}
+                                    <div className={`rounded-2xl border transition-all duration-500 overflow-hidden shadow-sm relative group ${ticket.is_backordered ? 'border-red-400 ring-4 ring-red-500/10 bg-red-50/50 dark:bg-red-900/5' : 'border-[var(--border-color)] bg-[var(--bg-subtle)] hover:shadow-md'}`}>
+
+                                        {/* Status Bar / Header */}
+                                        <div className={`p-4 flex flex-col sm:flex-row justify-between items-center gap-4 border-b backdrop-blur-sm ${ticket.is_backordered ? 'bg-red-100/50 dark:bg-red-900/30 border-red-200 dark:border-red-800/50' : 'bg-slate-50/80 dark:bg-slate-800/50 border-[var(--border-color)]'}`}>
+
+                                            {/* Status Indicator */}
+                                            <div className="flex items-center gap-3">
+                                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-sm ${ticket.is_backordered ? 'bg-red-500 text-white animate-pulse' : 'bg-white dark:bg-slate-700 text-indigo-600'}`}>
+                                                    {ticket.is_backordered ? <AlertTriangle size={20} /> : <DollarSign size={20} />}
+                                                </div>
+                                                <div>
+                                                    <h4 className={`font-black text-sm uppercase tracking-wide ${ticket.is_backordered ? 'text-red-600 dark:text-red-400' : 'text-[var(--text-main)]'}`}>
+                                                        {ticket.is_backordered ? 'Order Hold Active' : 'Repair Operations'}
+                                                    </h4>
+                                                    <p className="text-[10px] font-bold text-[var(--text-muted)]">
+                                                        {ticket.is_backordered ? 'Waiting on vendor parts delivery' : 'Manage estimate, inventory & orders'}
+                                                    </p>
+                                                </div>
+                                            </div>
+
+                                            {/* Toggle Switch */}
+                                            <div className="flex items-center gap-3 bg-white dark:bg-slate-900 p-1.5 rounded-full border border-[var(--border-color)] shadow-sm">
+                                                <span className={`text-[10px] font-bold uppercase px-2 ${ticket.is_backordered ? 'text-red-500' : 'text-[var(--text-muted)]'}`}>
+                                                    {ticket.is_backordered ? 'On Hold' : 'Standard'}
+                                                </span>
+                                                <button
+                                                    onClick={toggleBackorder}
+                                                    disabled={!canEdit}
+                                                    className={`w-12 h-6 rounded-full transition-all relative shadow-inner flex items-center ${ticket.is_backordered ? 'bg-red-500' : 'bg-slate-200 dark:bg-slate-700'} ${!canEdit ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                                                >
+                                                    <div className={`w-5 h-5 bg-white rounded-full shadow-md absolute transition-all duration-300 ${ticket.is_backordered ? 'translate-x-6' : 'translate-x-0.5'}`} />
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* Tools Area */}
+                                        <div className={`p-6 space-y-8 ${isClosed ? 'opacity-60 pointer-events-none grayscale-[0.5]' : ''}`}>
+
+                                            {/* 1. The Estimate Builder */}
+                                            <div className="relative">
+                                                <div className="absolute -left-6 top-6 bottom-6 w-1 bg-indigo-500/20 rounded-r-full"></div>
+                                                <EstimateBuilder
+                                                    ticketId={id}
+                                                    onTotalChange={handleEstimateUpdate}
+                                                    onActivityLog={handleEstimateLog}
+                                                    refreshTrigger={estimateRefreshTrigger}
+                                                />
+                                            </div>
+
+                                            {/* 2. Parts Tracking */}
+                                            <div className="relative">
+                                                <div className="absolute -left-6 top-6 bottom-6 w-1 bg-emerald-500/20 rounded-r-full"></div>
+                                                <PartsOrderManager
+                                                    ticketId={id}
+                                                    onActivityLog={handleEstimateLog}
+                                                    onAddToEstimate={() => setEstimateRefreshTrigger(prev => prev + 1)}
+                                                />
+                                            </div>
+
+                                            {/* 3. Sourcing Tools */}
+                                            <div className="relative">
+                                                <div className="absolute -left-6 top-6 bottom-6 w-1 bg-amber-500/20 rounded-r-full"></div>
+                                                <PartSourcing
+                                                    initialQuery={`${ticket.brand} ${ticket.model}`}
+                                                    ticketId={id}
+                                                    onAddToEstimate={() => setEstimateRefreshTrigger(prev => prev + 1)}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* Footer / Read Only Overlay */}
+                                        {isClosed && (
+                                            <div className="absolute inset-0 z-10 bg-slate-100/50 dark:bg-slate-900/50 backdrop-blur-[1px] flex items-center justify-center">
+                                                <div className="bg-white dark:bg-slate-800 px-6 py-3 rounded-full shadow-xl border border-[var(--border-color)] flex items-center gap-2">
+                                                    <LockKeyhole size={16} className="text-[var(--text-muted)]" />
+                                                    <span className="text-xs font-bold text-[var(--text-main)]">Ticket Completed - Read Only</span>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
                             )}
+
+                            {/* Customer View Placeholder */}
                             {!isStaff && <div className="animate-fade-in-up mt-6 border-t pt-6"><CustomerEstimateView ticketId={id} /></div>}
                         </div>
-                    </div>
 
-                    {/* --- UPDATED: CLEANER ACTIVITY LOG --- */}
-                    {isManagement && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in-up">
-                            <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl shadow-sm overflow-hidden">
-                                <div className="bg-[var(--bg-subtle)] px-4 py-3 border-b border-[var(--border-color)] flex justify-between items-center">
-                                    <h2 className="text-[10px] font-bold uppercase text-[var(--text-muted)] tracking-widest flex items-center gap-2">
-                                        <ShieldAlert size={14} /> Restricted Activity Log
-                                    </h2>
-                                </div>
-                                <div className="max-h-64 overflow-y-auto custom-scrollbar">
-                                    {auditLogs.length === 0 ? (
-                                        <p className="text-xs text-[var(--text-muted)] italic text-center py-6">No activity recorded yet.</p>
-                                    ) : (
-                                        <div className="divide-y divide-[var(--border-color)]">
-                                            {auditLogs.map(log => {
-                                                const visuals = getLogVisuals(log.action);
-                                                return (
-                                                    <div
-                                                        key={log.id}
-                                                        onClick={() => setSelectedLog(log)}
-                                                        className="p-3 flex items-start gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors group"
-                                                    >
-                                                        {/* Icon Circle */}
-                                                        <div className={`w-8 h-8 rounded-full flex-none flex items-center justify-center shadow-sm ${visuals.bg}`}>
-                                                            {visuals.icon}
-                                                        </div>
+                        {/* --- RESTRICTED ACTIVITY LOG (PREMIUM UI) --- */}
+                        {isManagement && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in-up">
 
-                                                        {/* Content */}
-                                                        <div className="flex-1 min-w-0">
-                                                            <div className="flex justify-between items-baseline mb-0.5">
-                                                                <span className="text-[10px] font-black uppercase tracking-wider opacity-50">{log.action.split(' ')[0]}</span>
-                                                                <span className="text-[9px] text-[var(--text-muted)]">{format(new Date(log.created_at), 'MMM d, h:mm a')}</span>
-                                                            </div>
-                                                            <div className="text-xs font-medium text-[var(--text-main)] truncate">{log.details}</div>
-                                                            <div className="text-[9px] text-[var(--text-muted)] mt-0.5 flex items-center gap-1">
-                                                                <User size={8} /> {log.actor_name.split(' ')[0]}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
+                                {/* 1. THE LOG LIST */}
+                                <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-2xl shadow-sm overflow-hidden flex flex-col h-80">
+
+                                    {/* Header with Distinct Background */}
+                                    <div className="px-5 py-4 bg-slate-50 dark:bg-slate-800/50 border-b border-[var(--border-color)] flex justify-between items-center shrink-0">
+                                        <h2 className="text-[10px] font-bold uppercase text-[var(--text-muted)] tracking-widest flex items-center gap-2">
+                                            <ShieldAlert size={14} className="text-indigo-600" /> Restricted Activity Log
+                                        </h2>
+                                        <div className="px-2 py-0.5 bg-white dark:bg-slate-700 rounded-md border border-[var(--border-color)] text-[10px] font-mono text-[var(--text-muted)] shadow-sm">
+                                            {auditLogs.length} Records
                                         </div>
-                                    )}
+                                    </div>
+
+                                    {/* Scrollable Content */}
+                                    <div className="overflow-y-auto custom-scrollbar flex-1 bg-[var(--bg-surface)]">
+                                        {auditLogs.length === 0 ? (
+                                            <div className="h-full flex flex-col items-center justify-center text-[var(--text-muted)] opacity-60">
+                                                <History size={24} className="mb-2" />
+                                                <p className="text-xs italic">No activity recorded yet.</p>
+                                            </div>
+                                        ) : (
+                                            <div className="divide-y divide-[var(--border-color)]">
+                                                {auditLogs.map(log => {
+                                                    const visuals = getLogVisuals(log.action);
+                                                    return (
+                                                        <div
+                                                            key={log.id}
+                                                            onClick={() => setSelectedLog(log)}
+                                                            className="px-5 py-3 flex items-start gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors group relative pr-10"
+                                                        >
+                                                            {/* Icon Circle */}
+                                                            <div className={`w-8 h-8 rounded-full flex-none flex items-center justify-center shadow-sm border border-transparent ${visuals.bg}`}>
+                                                                {visuals.icon}
+                                                            </div>
+
+                                                            {/* Content */}
+                                                            <div className="flex-1 min-w-0">
+                                                                <div className="flex justify-between items-baseline mb-0.5">
+                                                                    <span className="text-[10px] font-black uppercase tracking-wider opacity-50">{log.action.split(' ')[0]}</span>
+                                                                    <span className="text-[9px] text-[var(--text-muted)] font-medium">
+                                                                        {format(new Date(log.created_at), 'MMM d, h:mm a')}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="text-xs font-bold text-[var(--text-main)] truncate">{log.details}</div>
+                                                                <div className="text-[9px] text-[var(--text-muted)] mt-0.5 flex items-center gap-1">
+                                                                    <User size={8} />
+                                                                    <span className="opacity-80">{log.actor_name.split(' ')[0]}</span>
+                                                                </div>
+                                                            </div>
+
+                                                            {/* DELETE BUTTON - ADMIN ONLY */}
+                                                            {userRole === 'admin' && (
+                                                                <button
+                                                                    onClick={(e) => promptDeleteLog(log, e)}
+                                                                    className="absolute right-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-all transform scale-90 hover:scale-100 btn btn-ghost btn-xs btn-square text-red-400 hover:bg-red-50 hover:text-red-600 hover:border-red-200"
+                                                                    title="Delete Log Entry"
+                                                                >
+                                                                    <Trash2 size={14} />
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* 2. FUTURE FEATURE SLOT (Stylized Placeholder) */}
+                                <div className="border-2 border-dashed border-[var(--border-color)] rounded-2xl flex flex-col items-center justify-center p-6 text-[var(--text-muted)] bg-slate-50/50 dark:bg-slate-800/20 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors h-80 cursor-default group">
+                                    <div className="w-16 h-16 rounded-full bg-white dark:bg-slate-800 shadow-sm flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-500">
+                                        <PlusCircle size={32} className="opacity-30 text-[var(--text-main)]" />
+                                    </div>
+                                    <span className="font-black text-xs uppercase tracking-widest opacity-60">System Module Slot</span>
+                                    <span className="text-[10px] opacity-40 mt-1">Reserved for future expansion</span>
                                 </div>
                             </div>
-
-                            <div className="border-2 border-dashed border-[var(--border-color)] rounded-xl flex flex-col items-center justify-center p-6 text-[var(--text-muted)] bg-[var(--bg-subtle)] bg-opacity-50">
-                                <PlusCircle size={32} className="mb-2 opacity-50" />
-                                <span className="font-bold text-sm uppercase tracking-wider">Future Feature Slot</span>
-                                <span className="text-xs opacity-70">Reserved for next module</span>
-                            </div>
-                        </div>
-                    )}
+                        )}
+                    </div>
                 </div>
 
                 <div className="hidden lg:block col-span-1">
@@ -754,6 +955,75 @@ export default function TicketDetail() {
                                     </div>
                                 </div>
                             )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* --- PREMIUM DELETE MODAL --- */}
+            {logToDelete && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                    {/* Backdrop */}
+                    <div
+                        className="absolute inset-0 bg-slate-900/60 backdrop-blur-md transition-opacity animate-fade-in"
+                        onClick={() => setLogToDelete(null)}
+                    />
+
+                    {/* Modal Card */}
+                    <div className="relative w-full max-w-sm bg-[var(--bg-surface)] rounded-2xl shadow-[0_20px_50px_-12px_rgba(0,0,0,0.5)] overflow-hidden border border-[var(--border-color)] animate-pop ring-1 ring-red-500/20">
+
+                        {/* Red Hazard Strip at Top */}
+                        <div className="h-1.5 w-full bg-gradient-to-r from-red-500 via-orange-500 to-red-500"></div>
+
+                        <div className="p-8">
+                            {/* Animated Icon Wrapper */}
+                            <div className="mx-auto w-20 h-20 bg-red-50 dark:bg-red-900/20 rounded-full flex items-center justify-center mb-6 relative">
+                                <div className="absolute inset-0 rounded-full bg-red-500/20 animate-ping opacity-50"></div>
+                                <Trash2 size={36} className="text-red-600 dark:text-red-500 relative z-10" />
+                            </div>
+
+                            <div className="text-center mb-8">
+                                <h3 className="text-2xl font-black text-[var(--text-main)] mb-2">Delete Log Entry?</h3>
+                                <p className="text-sm text-[var(--text-muted)] leading-relaxed">
+                                    This action cannot be undone. This record will be <strong className="text-red-500">permanently erased</strong> from the database history.
+                                </p>
+                            </div>
+
+                            {/* Data Preview Card */}
+                            <div className="bg-[var(--bg-subtle)] rounded-xl border border-[var(--border-color)] p-4 text-left mb-8 relative overflow-hidden group">
+                                {/* Side Accent */}
+                                <div className="absolute top-0 bottom-0 left-0 w-1 bg-red-400"></div>
+
+                                <div className="pl-3">
+                                    <div className="flex justify-between items-center mb-1">
+                                        <span className="text-[10px] font-black uppercase text-[var(--text-muted)] tracking-wider">
+                                            Log #{logToDelete.id}
+                                        </span>
+                                        <span className="text-[10px] font-bold text-[var(--text-muted)]">
+                                            {new Date(logToDelete.created_at).toLocaleDateString()}
+                                        </span>
+                                    </div>
+                                    <p className="font-mono text-xs text-[var(--text-main)] line-clamp-2 opacity-90">
+                                        "{logToDelete.details}"
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Action Buttons */}
+                            <div className="grid grid-cols-2 gap-3">
+                                <button
+                                    onClick={() => setLogToDelete(null)}
+                                    className="btn btn-ghost h-12 font-bold text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] border border-transparent hover:border-[var(--border-color)]"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={executeDeleteLog}
+                                    className="btn btn-error h-12 text-white font-bold shadow-lg shadow-red-500/30 border-none bg-gradient-to-br from-red-500 to-red-600 hover:scale-[1.02] transition-transform"
+                                >
+                                    Yes, Delete
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

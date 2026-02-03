@@ -15,6 +15,7 @@ import CustomerHistory from './pages/CustomerHistory';
 import MyTickets from './pages/MyTickets';
 import Team from './pages/Team'; // <--- Added Team Page
 import Customers from './pages/Customers'; // <--- Added Customers Page
+import Inventory from './pages/Inventory';
 
 
 function App() {
@@ -115,15 +116,21 @@ function App() {
             element={session && isStaff ? <PrintLabel /> : <Navigate to="/" />}
           />
 
+          {/* INVENTORY MANAGEMENT - Staff Only */}
           <Route
-            path="/customers"
-            element={session && isStaff ? <Customers /> : <Navigate to="/" />}
+            path="/inventory"
+            element={session && isStaff ? <Inventory /> : <Navigate to="/" />}
           />
 
           {/* CUSTOMER HISTORY - Staff Only */}
           <Route
             path="/customer/:id"
             element={session && isStaff ? <CustomerHistory /> : <Navigate to="/" />}
+          />
+
+          <Route
+            path="/customers"
+            element={session && isStaff ? <Customers /> : <Navigate to="/" />}
           />
 
           {/* TEAM MANAGEMENT - Managers & Admins Only */}
