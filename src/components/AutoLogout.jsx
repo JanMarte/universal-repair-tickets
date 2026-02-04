@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 
 // SETTINGS: 30 Minutes (Change to 1 * 60 * 1000 for testing)
-const INACTIVITY_LIMIT = 1 * 60 * 1000;
+const INACTIVITY_LIMIT = 30 * 60 * 1000;
 
 export default function AutoLogout() {
   const lastActivityRef = useRef(Date.now());
