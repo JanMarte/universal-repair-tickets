@@ -1,53 +1,45 @@
-import { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
-import { useToast } from '../context/ToastProvider';
-import { useNavigate } from 'react-router-dom';
 
-// Default to 15 minutes (in milliseconds)
-const TIMEOUT_MS = 15 * 60 * 1000;
+// SETTINGS: 30 Minutes (Change to 1 * 60 * 1000 for testing)
+const INACTIVITY_LIMIT = 1 * 60 * 1000;
 
 export default function AutoLogout() {
-  const { addToast } = useToast();
-  const navigate = useNavigate();
-  const timerRef = useRef(null);
+  const lastActivityRef = useRef(Date.now());
+
+  const triggerLogout = useCallback(async () => {
+    console.log("Auto-logout triggered"); // Debug log
+
+    // 1. Set the flag explicitly
+    window.localStorage.setItem('session_expired', 'true');
+
+    // 2. Kill the session
+    await supabase.auth.signOut();
+
+    // Note: We do NOT force window.location.href here. 
+    // App.jsx will see the auth state change and render <Login /> automatically.
+  }, []);
+
+  const resetTimer = useCallback(() => {
+    lastActivityRef.current = Date.now();
+  }, []);
 
   useEffect(() => {
-    // 1. The function that runs when the timer hits zero
-    const handleLogout = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-
-      // Only logout if someone is actually logged in
-      if (session) {
-        await supabase.auth.signOut();
-        addToast("Logged out due to inactivity", "info");
-        navigate('/login');
-      }
-    };
-
-    // 2. The function that resets the timer whenever the user moves
-    const resetTimer = () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-      timerRef.current = setTimeout(handleLogout, TIMEOUT_MS);
-    };
-
-    // 3. Listen for any user activity
     const events = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart'];
+    events.forEach(event => document.addEventListener(event, resetTimer));
 
-    events.forEach(event => {
-      window.addEventListener(event, resetTimer);
-    });
+    const intervalId = setInterval(() => {
+      const now = Date.now();
+      if (now - lastActivityRef.current > INACTIVITY_LIMIT) {
+        triggerLogout();
+      }
+    }, 5000); // Check every 5 seconds for better responsiveness during testing
 
-    // Start the timer initially
-    resetTimer();
-
-    // Cleanup: Remove listeners when the app closes
     return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-      events.forEach(event => {
-        window.removeEventListener(event, resetTimer);
-      });
+      events.forEach(event => document.removeEventListener(event, resetTimer));
+      clearInterval(intervalId);
     };
-  }, [navigate, addToast]);
+  }, [resetTimer, triggerLogout]);
 
-  return null; // This component renders nothing visible
+  return null;
 }

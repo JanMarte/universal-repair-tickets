@@ -16,6 +16,7 @@ import MyTickets from './pages/MyTickets';
 import Team from './pages/Team'; // <--- Added Team Page
 import Customers from './pages/Customers'; // <--- Added Customers Page
 import Inventory from './pages/Inventory';
+import PublicStatusPage from './pages/PublicStatusPage';
 
 
 function App() {
@@ -121,6 +122,9 @@ function App() {
             path="/inventory"
             element={session && isStaff ? <Inventory /> : <Navigate to="/" />}
           />
+
+          {/* 2. Add Public Route (No Auth Guard!) */}
+          <Route path="/status/:id" element={<PublicStatusPage />} />
 
           {/* CUSTOMER HISTORY - Staff Only */}
           <Route
