@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import TicketCard from '../components/TicketCard';
 import IntakeModal from '../components/IntakeModal';
+import KanbanBoard from '../components/KanbanBoard'; // <--- 1. NEW IMPORT
 import { useNavigate } from 'react-router-dom';
 import {
   Search, Filter, Moon, Sun, Plus, XCircle, LogOut, Users, QrCode,
   AlertTriangle, DollarSign, Activity, ChevronDown, ChevronUp, Layers, UserCheck,
-  Package // <--- 1. ADDED MISSING IMPORT
+  Package, LayoutGrid, List as ListIcon // <--- 2. NEW ICONS
 } from 'lucide-react';
 import { useToast } from '../context/ToastProvider';
 import QRScanner from '../components/QRScanner';
@@ -26,6 +27,9 @@ export default function Dashboard() {
   const [statusFilter, setStatusFilter] = useState('ACTIVE');
   const [isScanning, setIsScanning] = useState(false);
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
+
+  // --- 3. VIEW MODE STATE ---
+  const [viewMode, setViewMode] = useState('list'); // 'list' or 'board'
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -130,7 +134,6 @@ export default function Dashboard() {
         </div>
 
         <div className="flex-none flex items-center gap-2">
-
           <button className="btn btn-sm btn-circle btn-ghost text-[var(--text-main)]" onClick={() => setIsScanning(true)}><QrCode size={20} /></button>
 
           {/* DESKTOP NAV BUTTONS */}
@@ -175,8 +178,6 @@ export default function Dashboard() {
                   <Users size={16} /> Customer Database
                 </button>
               </li>
-
-              {/* 2. ADDED INVENTORY MOBILE LINK */}
               <li>
                 <button onClick={() => navigate('/inventory')} className="font-bold text-[var(--text-main)] md:hidden">
                   <Package size={16} /> Inventory
@@ -247,6 +248,7 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 animate-fade">
+        {/* SIDEBAR FILTERS (Hidden on Mobile) */}
         <div className="hidden lg:block lg:col-span-1">
           <div className="sticky top-28 rounded-2xl shadow-sm bg-[var(--bg-surface)] border border-[var(--border-color)]">
             <div className="p-6">
@@ -261,7 +263,7 @@ export default function Dashboard() {
                 <select className="select select-bordered w-full font-bold shadow-sm" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
                   <option value="ALL">All Tickets</option>
                   <option value="ACTIVE">Active Workload</option>
-                  <option value="MY_WORK">👤 My Repairs</option> {/* NEW OPTION */}
+                  <option value="MY_WORK">👤 My Repairs</option>
                   <option value="ATTENTION">⚠️ Attention Needed</option>
                   <hr disabled />
                   <option value="intake">Intake</option>
@@ -289,7 +291,6 @@ export default function Dashboard() {
                   <div className="p-2 bg-emerald-100 dark:bg-emerald-900/20 rounded-full text-emerald-600"><Activity size={18} /></div>
                 </div>
 
-                {/* NEW STAT: MY WORK */}
                 <div onClick={() => setStatusFilter('MY_WORK')} className={`flex items-center justify-between p-3 -mx-3 rounded-lg cursor-pointer transition-all group ${statusFilter === 'MY_WORK' ? 'bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-100' : 'hover:bg-[var(--bg-subtle)] border border-transparent'}`}>
                   <div>
                     <div className="text-xs font-bold uppercase text-[var(--text-muted)] mb-1">My Repairs</div>
@@ -318,6 +319,7 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {/* MAIN CONTENT AREA */}
         <div className="lg:col-span-3">
           <div className="mb-4 flex items-center justify-between bg-[var(--bg-subtle)] p-2 px-4 rounded-lg border border-[var(--border-color)]">
             <div className="flex items-center gap-3">
@@ -326,29 +328,59 @@ export default function Dashboard() {
               <span className={`badge ${getFilterBadgeColor(statusFilter)} font-black uppercase tracking-wide`}>
                 {statusFilter === 'BACKORDER' ? 'Waiting (Parts)' : statusFilter.replace('_', ' ')}
               </span>
+              {statusFilter !== 'ALL' && (
+                <button onClick={() => setStatusFilter('ALL')} className="btn btn-xs btn-ghost text-[var(--text-muted)] hover:text-red-500 gap-1">
+                  <XCircle size={14} /> Clear
+                </button>
+              )}
             </div>
-            {statusFilter !== 'ALL' && (
-              <button onClick={() => setStatusFilter('ALL')} className="btn btn-xs btn-ghost text-[var(--text-muted)] hover:text-red-500 gap-1">
-                <XCircle size={14} /> Clear
+
+            {/* --- 4. NEW VIEW TOGGLE BUTTONS --- */}
+            <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] p-1 rounded-lg flex gap-1">
+              <button
+                onClick={() => setViewMode('list')}
+                className={`p-1.5 rounded-md transition-all ${viewMode === 'list' ? 'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400 shadow-sm' : 'text-[var(--text-muted)] hover:bg-[var(--bg-subtle)]'}`}
+                title="List View"
+              >
+                <ListIcon size={18} />
               </button>
-            )}
+              <button
+                onClick={() => setViewMode('board')}
+                className={`p-1.5 rounded-md transition-all ${viewMode === 'board' ? 'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400 shadow-sm' : 'text-[var(--text-muted)] hover:bg-[var(--bg-subtle)]'}`}
+                title="Kanban Board View"
+              >
+                <LayoutGrid size={18} />
+              </button>
+            </div>
           </div>
 
           {loading ? (
             <div className="flex justify-center mt-20"><span className="loading loading-spinner loading-lg text-primary"></span></div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-              {filteredTickets.length === 0 && (
-                <div className="col-span-full text-center p-12 border-2 border-dashed border-[var(--border-color)] rounded-2xl bg-[var(--bg-surface)]">
-                  <p className="font-bold text-xl text-[var(--text-main)]">No tickets found</p>
-                  <p className="text-sm mt-2 text-[var(--text-muted)]">Adjust your filters to see results.</p>
-                  <button className="btn btn-outline btn-sm mt-6 text-[var(--text-main)]" onClick={() => { setStatusFilter('ALL'); setSearchQuery('') }}>Clear Filters</button>
+            // --- 5. CONDITIONAL RENDERING ---
+            <>
+              {viewMode === 'board' ? (
+                <div className="overflow-x-auto h-[calc(100vh-250px)]">
+                  <KanbanBoard
+                    tickets={filteredTickets}
+                    onTicketUpdate={fetchTickets}
+                  />
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                  {filteredTickets.length === 0 && (
+                    <div className="col-span-full text-center p-12 border-2 border-dashed border-[var(--border-color)] rounded-2xl bg-[var(--bg-surface)]">
+                      <p className="font-bold text-xl text-[var(--text-main)]">No tickets found</p>
+                      <p className="text-sm mt-2 text-[var(--text-muted)]">Adjust your filters to see results.</p>
+                      <button className="btn btn-outline btn-sm mt-6 text-[var(--text-main)]" onClick={() => { setStatusFilter('ALL'); setSearchQuery('') }}>Clear Filters</button>
+                    </div>
+                  )}
+                  {filteredTickets.map(ticket => (
+                    <TicketCard key={ticket.id} ticket={ticket} />
+                  ))}
                 </div>
               )}
-              {filteredTickets.map(ticket => (
-                <TicketCard key={ticket.id} ticket={ticket} />
-              ))}
-            </div>
+            </>
           )}
         </div>
       </div>
