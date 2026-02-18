@@ -4,7 +4,7 @@ import { Plus, Trash2, DollarSign, Box, MapPin, Hash, RotateCcw, Wrench, PenTool
 import { formatCurrency } from '../utils';
 import { useToast } from '../context/ToastProvider';
 
-export default function EstimateBuilder({ ticketId, onTotalChange, onActivityLog, refreshTrigger }) {
+export default function EstimateBuilder({ ticketId, onTotalChange, onActivityLog, refreshTrigger, estimateStatus = 'draft', onUpdateStatus }) {
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(true);
     const { addToast } = useToast();
@@ -241,6 +241,36 @@ export default function EstimateBuilder({ ticketId, onTotalChange, onActivityLog
                             <Plus size={20} />
                         </button>
                     </div>
+                </div>
+            </div>
+
+            {/* --- 4. ESTIMATE STATUS & ACTIONS --- */}
+            <div className="p-4 bg-slate-100 dark:bg-slate-800/50 border-t border-[var(--border-color)] flex flex-col md:flex-row justify-between items-center gap-4">
+                <div className="flex items-center gap-3">
+                    <span className="text-xs font-bold uppercase text-[var(--text-muted)]">Customer Visibility:</span>
+                    {estimateStatus === 'draft' && <span className="badge badge-neutral font-bold uppercase tracking-wider text-[10px]">Draft (Hidden)</span>}
+                    {estimateStatus === 'sent' && <span className="badge badge-warning font-bold uppercase tracking-wider text-[10px]">Awaiting Approval</span>}
+                    {estimateStatus === 'approved' && <span className="badge badge-success text-white font-bold uppercase tracking-wider text-[10px]">Approved</span>}
+                    {estimateStatus === 'declined' && <span className="badge badge-error text-white font-bold uppercase tracking-wider text-[10px]">Declined</span>}
+                </div>
+
+                <div className="flex gap-2 w-full md:w-auto">
+                    {estimateStatus === 'draft' ? (
+                        <button
+                            onClick={() => onUpdateStatus && onUpdateStatus('sent')}
+                            disabled={items.length === 0}
+                            className="btn btn-sm btn-primary shadow-md flex-1 md:flex-none"
+                        >
+                            Send to Customer
+                        </button>
+                    ) : (
+                        <button
+                            onClick={() => onUpdateStatus && onUpdateStatus('draft')}
+                            className="btn btn-sm btn-ghost border border-[var(--border-color)] text-[var(--text-muted)] flex-1 md:flex-none"
+                        >
+                            Recall / Edit Draft
+                        </button>
+                    )}
                 </div>
             </div>
 

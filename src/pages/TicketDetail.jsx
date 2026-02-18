@@ -5,7 +5,8 @@ import { format } from 'date-fns';
 import {
     ArrowLeft, Camera, Image as ImageIcon, Loader2, Send, MessageSquare, Lock, Globe,
     AlertTriangle, Save, X, Edit3, Printer, Calendar, User, Phone, Hash, Wrench, AlertCircle, FileText, History, Moon, Sun, QrCode, ShieldAlert, Laptop, PlusCircle, LockKeyhole, DollarSign, Truck,
-    Trash2, Tag, ClipboardList, Fingerprint, Cpu, Share2, ChevronDown, ChevronUp, ZoomIn, ZoomOut, Maximize2
+    Trash2, Tag, ClipboardList, Fingerprint, Cpu, Share2, ChevronDown, ChevronUp, ZoomIn, ZoomOut, Maximize2,
+    CheckCircle, XCircle, Clock
 } from 'lucide-react';
 
 import { supabase } from '../supabaseClient';
@@ -427,6 +428,13 @@ export default function TicketDetail() {
         logAudit('FLAG UPDATE', newVal ? 'Marked as Waiting on Parts' : 'Cleared Waiting on Parts flag');
     };
 
+    const updateEstimateStatus = async (newStatus) => {
+        setTicket({ ...ticket, estimate_status: newStatus });
+        await supabase.from('tickets').update({ estimate_status: newStatus }).eq('id', id);
+        addToast(`Estimate marked as ${newStatus.toUpperCase()}`, 'success');
+        logAudit('ESTIMATE STATUS', `Changed estimate status to ${newStatus}`);
+    };
+
     const toggleTheme = () => {
         const newTheme = theme === 'light' ? 'dark' : 'light';
         setTheme(newTheme);
@@ -621,6 +629,23 @@ export default function TicketDetail() {
                         <div className="flex items-center gap-2 mb-3 flex-wrap">
                             {ticket.serial_number && <span className="flex items-center gap-2 bg-[var(--bg-subtle)] border border-[var(--border-color)] text-[var(--text-main)] px-3 py-1.5 rounded-md font-mono text-xs md:text-sm font-black tracking-wide shadow-sm"><Hash size={14} className="opacity-50" />{ticket.serial_number}</span>}
                             <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] flex items-center gap-1 bg-[var(--bg-subtle)] px-2 py-1.5 rounded-md"><Calendar size={12} /> {format(new Date(ticket.created_at), 'MMM dd')}</span>
+
+                            {/* NEW: PROMINENT ESTIMATE BADGE */}
+                            {ticket.estimate_status === 'approved' && (
+                                <span className="badge badge-success border-none text-white font-black uppercase tracking-widest text-[10px] px-3 py-2.5 shadow-sm gap-1 ml-2">
+                                    <CheckCircle size={12} /> Estimate Approved
+                                </span>
+                            )}
+                            {ticket.estimate_status === 'declined' && (
+                                <span className="badge badge-error border-none text-white font-black uppercase tracking-widest text-[10px] px-3 py-2.5 shadow-sm gap-1 ml-2">
+                                    <XCircle size={12} /> Estimate Declined
+                                </span>
+                            )}
+                            {ticket.estimate_status === 'sent' && (
+                                <span className="badge badge-warning border-none text-white font-black uppercase tracking-widest text-[10px] px-3 py-2.5 shadow-sm gap-1 ml-2">
+                                    <Clock size={12} /> Pending Approval
+                                </span>
+                            )}
                         </div>
                         <h1 className="text-2xl md:text-4xl font-black text-[var(--text-main)] tracking-tight mb-2 leading-tight">{ticket.brand} <span className="text-indigo-500">{ticket.model}</span></h1>
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm font-medium text-[var(--text-muted)] mt-2">
@@ -748,7 +773,14 @@ export default function TicketDetail() {
                                             </div>
                                         </div>
                                         <div className={`p-6 space-y-8 ${isClosed ? 'opacity-60 pointer-events-none grayscale-[0.5]' : ''}`}>
-                                            <div className="relative"><div className="absolute -left-6 top-6 bottom-6 w-1 bg-indigo-500/20 rounded-r-full"></div><EstimateBuilder ticketId={id} onTotalChange={handleEstimateUpdate} onActivityLog={handleEstimateLog} refreshTrigger={estimateRefreshTrigger} /></div>
+                                            <div className="relative"><div className="absolute -left-6 top-6 bottom-6 w-1 bg-indigo-500/20 rounded-r-full"></div><EstimateBuilder
+                                                ticketId={id}
+                                                onTotalChange={handleEstimateUpdate}
+                                                onActivityLog={handleEstimateLog}
+                                                refreshTrigger={estimateRefreshTrigger}
+                                                estimateStatus={ticket.estimate_status || 'draft'}
+                                                onUpdateStatus={updateEstimateStatus}
+                                            /></div>
                                             <div className="relative"><div className="absolute -left-6 top-6 bottom-6 w-1 bg-emerald-500/20 rounded-r-full"></div><PartsOrderManager ticketId={id} onActivityLog={handleEstimateLog} onAddToEstimate={() => setEstimateRefreshTrigger(prev => prev + 1)} /></div>
                                             <div className="relative"><div className="absolute -left-6 top-6 bottom-6 w-1 bg-amber-500/20 rounded-r-full"></div><PartSourcing initialQuery={`${ticket.brand} ${ticket.model}`} ticketId={id} onAddToEstimate={() => setEstimateRefreshTrigger(prev => prev + 1)} /></div>
                                         </div>
@@ -858,6 +890,59 @@ export default function TicketDetail() {
 
                     <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 text-white text-xs font-mono pointer-events-none">
                         {!isNaN(Number(lightboxImage.name.split('.')[0])) ? new Date(Number(lightboxImage.name.split('.')[0])).toLocaleString() : lightboxImage.name}
+                    </div>
+                </div>
+            )}
+
+            {/* --- LOG DETAILS MODAL --- */}
+            {selectedLog && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setSelectedLog(null)}>
+                    <div className="bg-[var(--bg-surface)] w-full max-w-md rounded-2xl shadow-2xl border border-[var(--border-color)] flex flex-col overflow-hidden animate-pop" onClick={e => e.stopPropagation()}>
+
+                        {/* Header */}
+                        <div className="p-5 border-b border-[var(--border-color)] bg-[var(--bg-subtle)] flex justify-between items-center">
+                            <h3 className="font-black text-lg text-[var(--text-main)] flex items-center gap-2">
+                                <History size={18} className="text-indigo-500" /> Activity Details
+                            </h3>
+                            <button onClick={() => setSelectedLog(null)} className="btn btn-sm btn-circle btn-ghost text-[var(--text-muted)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-main)] transition-colors">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        {/* Body */}
+                        <div className="p-6 space-y-4">
+                            <div>
+                                <div className="text-[10px] font-black uppercase text-[var(--text-muted)] tracking-widest mb-1">Action</div>
+                                <div className="font-bold text-[var(--text-main)] text-base">{selectedLog.action}</div>
+                            </div>
+                            <div>
+                                <div className="text-[10px] font-black uppercase text-[var(--text-muted)] tracking-widest mb-1">Performed By</div>
+                                <div className="flex items-center gap-2 font-medium text-[var(--text-main)]">
+                                    <User size={14} className="text-[var(--text-muted)]" /> {selectedLog.actor_name}
+                                </div>
+                            </div>
+                            <div>
+                                <div className="text-[10px] font-black uppercase text-[var(--text-muted)] tracking-widest mb-1">Timestamp</div>
+                                <div className="font-medium text-[var(--text-main)] text-sm">{format(new Date(selectedLog.created_at), 'MMM d, yyyy - h:mm:ss a')}</div>
+                            </div>
+                            <div>
+                                <div className="text-[10px] font-black uppercase text-[var(--text-muted)] tracking-widest mb-1">Description</div>
+                                <div className="p-3 bg-[var(--bg-subtle)] rounded-lg text-sm text-[var(--text-main)] border border-[var(--border-color)] shadow-sm">
+                                    {selectedLog.details}
+                                </div>
+                            </div>
+
+                            {/* System Metadata (Now using theme variables!) */}
+                            {selectedLog.metadata && Object.keys(selectedLog.metadata).length > 0 && (
+                                <div>
+                                    <div className="text-[10px] font-black uppercase text-[var(--text-muted)] tracking-widest mb-1">System Metadata</div>
+                                    <pre className="p-3 bg-[var(--bg-subtle)] text-[var(--text-main)] rounded-lg text-xs overflow-x-auto border border-[var(--border-color)] font-mono shadow-inner opacity-90">
+                                        {JSON.stringify(selectedLog.metadata, null, 2)}
+                                    </pre>
+                                </div>
+                            )}
+                        </div>
+
                     </div>
                 </div>
             )}

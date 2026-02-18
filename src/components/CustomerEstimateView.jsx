@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
-import { CheckCircle, XCircle, DollarSign, AlertTriangle } from 'lucide-react';
+import { CheckCircle, XCircle, DollarSign, AlertTriangle, Clock } from 'lucide-react';
 import { useToast } from '../context/ToastProvider';
 
 export default function CustomerEstimateView({ ticketId }) {
@@ -8,17 +8,17 @@ export default function CustomerEstimateView({ ticketId }) {
     const [items, setItems] = useState([]);
     const [status, setStatus] = useState('draft');
     const [loading, setLoading] = useState(true);
-    const [ticketInfo, setTicketInfo] = useState(null); // Need customer name for email
-    const [isProcessing, setIsProcessing] = useState(false); // To prevent double clicks
+    const [ticketInfo, setTicketInfo] = useState(null);
+    const [isProcessing, setIsProcessing] = useState(false);
 
     useEffect(() => {
         fetchData();
     }, [ticketId]);
 
     const fetchData = async () => {
-        // 1. Get Items
+        // 1. Get Items (Fixed table name to match EstimateBuilder)
         const { data: lineItems } = await supabase
-            .from('ticket_line_items')
+            .from('estimate_items')
             .select('*')
             .eq('ticket_id', ticketId);
 
@@ -31,7 +31,7 @@ export default function CustomerEstimateView({ ticketId }) {
 
         setItems(lineItems || []);
         if (ticket) {
-            setStatus(ticket.estimate_status);
+            setStatus(ticket.estimate_status || 'draft');
             setTicketInfo(ticket);
         }
         setLoading(false);
@@ -41,7 +41,6 @@ export default function CustomerEstimateView({ ticketId }) {
         setIsProcessing(true);
         const newStatus = decision === 'approve' ? 'approved' : 'declined';
 
-        // 1. Update Database
         const { error } = await supabase
             .from('tickets')
             .update({ estimate_status: newStatus })
@@ -53,10 +52,20 @@ export default function CustomerEstimateView({ ticketId }) {
             return;
         }
 
-        // 2. Send Notification Email to Company (YOU)
-        const grandTotal = items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0);
-        
-        const emailSubject = decision === 'approve' 
+        // --- NEW: LOG DECISION TO THE TICKET AUDIT FEED ---
+        await supabase.from('audit_logs').insert([{
+            ticket_id: ticketId,
+            actor_name: ticketInfo?.customer_name || 'Customer',
+            action: newStatus === 'approved' ? 'ESTIMATE APPROVED' : 'ESTIMATE DECLINED',
+            details: newStatus === 'approved'
+                ? 'Customer digitally approved the repair estimate.'
+                : 'Customer declined the repair estimate.',
+        }]);
+
+        // Fixed pricing calculation to match EstimateBuilder schema
+        const grandTotal = items.reduce((sum, item) => sum + (item.part_cost || 0) + (item.labor_cost || 0), 0);
+
+        const emailSubject = decision === 'approve'
             ? `✅ APPROVED: Ticket #${ticketId} ($${grandTotal.toFixed(2)})`
             : `❌ DECLINED: Ticket #${ticketId}`;
 
@@ -76,34 +85,46 @@ export default function CustomerEstimateView({ ticketId }) {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    // NOTIFICATION: Send this to YOURSELF (The Shop Owner)
                     to: 'YOUR_PERSONAL_EMAIL@GMAIL.COM', // <--- CHANGE THIS TO YOUR EMAIL
                     subject: emailSubject,
                     html: emailHtml
                 })
             });
-            
-            // 3. UI Updates
+
             setStatus(newStatus);
             addToast(decision === 'approve' ? "Thank you! We will start repairs." : "Estimate declined.", "success");
         } catch (err) {
             console.error("Email notification failed", err);
-            // We still set status because the DB update worked
             setStatus(newStatus);
         } finally {
             setIsProcessing(false);
         }
     };
 
-    const grandTotal = items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0);
+    const grandTotal = items.reduce((sum, item) => sum + (item.part_cost || 0) + (item.labor_cost || 0), 0);
 
     if (loading) return <div className="p-4 text-center text-sm opacity-50">Loading Estimate...</div>;
 
-    // If no items, don't show anything
+    // --- NEW: DRAFT STATE HANDLING ---
+    // If the estimate isn't explicitly pushed to the customer yet, show them this loading card.
+    if (status === 'draft' || !status) {
+        return (
+            <div className="bg-[var(--bg-surface)] rounded-xl border border-[var(--border-color)] overflow-hidden shadow-sm mt-6 p-8 text-center animate-fade-in-up">
+                <div className="w-16 h-16 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-inner">
+                    <Clock size={28} />
+                </div>
+                <h3 className="font-black text-lg text-[var(--text-main)] mb-2">Estimate in Progress</h3>
+                <p className="text-sm text-[var(--text-muted)] max-w-md mx-auto leading-relaxed">
+                    Our technicians are actively working on diagnosing your device and preparing a repair estimate. You will be able to review and approve the costs here once it is ready.
+                </p>
+            </div>
+        );
+    }
+
     if (items.length === 0) return null;
 
     return (
-        <div className="bg-[var(--bg-surface)] rounded-xl border border-[var(--border-color)] overflow-hidden shadow-lg mt-6">
+        <div className="bg-[var(--bg-surface)] rounded-xl border border-[var(--border-color)] overflow-hidden shadow-lg mt-6 animate-fade-in-up">
             <div className="p-6 bg-indigo-600 text-white">
                 <h3 className="font-bold text-lg flex items-center gap-2">
                     <DollarSign size={20} /> Repair Estimate Review
@@ -114,13 +135,13 @@ export default function CustomerEstimateView({ ticketId }) {
             <div className="p-6">
                 <div className="space-y-4 mb-6">
                     {items.map(item => (
-                        <div key={item.id} className="flex justify-between items-center border-b border-[var(--border-color)] pb-2 last:border-0">
+                        <div key={item.id} className="flex justify-between items-center border-b border-[var(--border-color)] pb-3 last:border-0">
                             <div>
-                                <div className="font-bold text-[var(--text-main)]">{item.description}</div>
-                                <div className="text-xs text-[var(--text-muted)]">Qty: {item.quantity}</div>
+                                <div className="font-bold text-[var(--text-main)] text-sm md:text-base">{item.description}</div>
+                                {item.sku && <div className="text-xs text-[var(--text-muted)] font-mono mt-0.5">#{item.sku}</div>}
                             </div>
-                            <div className="font-mono font-bold text-[var(--text-main)]">
-                                ${(item.quantity * item.unit_price).toFixed(2)}
+                            <div className="font-mono font-bold text-[var(--text-main)] text-lg">
+                                ${((item.part_cost || 0) + (item.labor_cost || 0)).toFixed(2)}
                             </div>
                         </div>
                     ))}
@@ -130,17 +151,16 @@ export default function CustomerEstimateView({ ticketId }) {
                     </div>
                 </div>
 
-                {/* DECISION BUTTONS */}
-                {status === 'sent' || status === 'draft' ? (
+                {status === 'sent' ? (
                     <div className="flex gap-4">
-                        <button 
+                        <button
                             onClick={() => handleDecision('decline')}
                             disabled={isProcessing}
                             className="flex-1 btn btn-outline border-red-200 text-red-500 hover:bg-red-50 hover:border-red-500"
                         >
                             {isProcessing ? '...' : <><XCircle /> Decline Repair</>}
                         </button>
-                        <button 
+                        <button
                             onClick={() => handleDecision('approve')}
                             disabled={isProcessing}
                             className="flex-1 btn btn-primary text-white shadow-lg shadow-indigo-500/30"

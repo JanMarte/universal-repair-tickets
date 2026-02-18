@@ -41,6 +41,16 @@ function App() {
   };
 
   useEffect(() => {
+    // --- GLOBAL THEME INITIALIZATION ---
+    // This ensures dark mode stays applied on ANY page refresh
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    if (savedTheme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+
     const initSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {

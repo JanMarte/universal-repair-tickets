@@ -10,20 +10,31 @@
     --color-primary: 79 70 229;
     /* Indigo */
 
-    /* Light Mode Colors - High Contrast */
-    --bg-app: #f0f4f8;
-    /* Page Background */
-    --bg-main: #f0f4f8;
-    /* Alias for compatibility */
+    /* Brand Interactions (Light Mode) */
+    --hover-bg: #e0e7ff;
+    /* indigo-50 */
+    --hover-text: #4338ca;
+    /* indigo-700 (High contrast) */
+    --hover-border: #c7d2fe;
+    /* indigo-200 */
+    --shadow-hover: 0 10px 25px -5px rgba(79, 70, 229, 0.15), 0 8px 10px -6px rgba(79, 70, 229, 0.1);
+
+    /* Light Mode Colors - Crisp & Clean */
+    --bg-app: #f8fafc;
+    /* slate-50 (Crisper than before) */
+    --bg-main: #f8fafc;
     --bg-surface: #ffffff;
-    /* Cards/Modals */
+    /* True White */
     --bg-subtle: #f1f5f9;
-    /* Inputs/Sidebars */
+    /* slate-100 */
 
     --text-main: #0f172a;
+    /* slate-900 */
     --text-muted: #475569;
+    /* slate-600 */
 
-    --border-color: #cbd5e1;
+    --border-color: #e2e8f0;
+    /* slate-200 (Cleaner, sharper lines) */
 
     /* Texture & Glass Effects */
     --pattern-color: rgba(148, 163, 184, 0.15);
@@ -33,16 +44,31 @@
 }
 
 [data-theme='dark'] {
-    /* Dark Mode Colors */
+    /* Brand Interactions (Dark Mode) */
+    --hover-bg: rgba(99, 102, 241, 0.6);
+    /* Brighter, highly visible indigo pill */
+    --hover-text: #ffffff !important;
+    /* Pure white text for maximum readability */
+    --hover-border: #6366f1;
+    /* Lighter indigo border (indigo-500) */
+    --shadow-hover: 0 10px 25px -5px rgba(99, 102, 241, 0.4), 0 8px 10px -6px rgba(99, 102, 241, 0.2);
+
+    /* Dark Mode Colors - Deep & Outlined */
     --bg-app: #020617;
+    /* slate-950 */
     --bg-main: #020617;
     --bg-surface: #0f172a;
+    /* slate-900 */
     --bg-subtle: #1e293b;
+    /* slate-800 */
 
     --text-main: #f8fafc;
-    --text-muted: #94a3b8;
+    /* slate-50 */
+    --text-muted: #cbd5e1;
+    /* slate-300 (Brighter for readability) */
 
-    --border-color: #1e293b;
+    --border-color: #334155;
+    /* slate-700 (Crucial for dark mode crispness) */
 
     /* Texture & Glass Effects */
     --pattern-color: rgba(255, 255, 255, 0.05);
@@ -78,7 +104,7 @@ body {
 /* --- Modal Components --- */
 .modal-backdrop {
     @apply fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fade;
-    background-color: rgba(15, 23, 42, 0.4);
+    background-color: rgba(0, 0, 0, 0.6);
 }
 
 .modal-window {
@@ -144,34 +170,34 @@ textarea:focus {
 }
 
 .btn-gradient:hover {
-    transform: translateY(-1px);
+    transform: translateY(-1px) scale(1.02);
     box-shadow: 0 6px 16px rgba(99, 102, 241, 0.4);
     filter: brightness(1.05);
 }
 
-.btn-cancel {
-    background-color: var(--bg-surface);
-    border: 1px solid var(--border-color);
-    color: var(--text-muted);
-    @apply font-medium hover:bg-slate-50 dark:hover:bg-slate-700 dark:hover:text-white transition-colors;
-}
-
 /* =========================================
-   4. ANIMATIONS
+   4. ANIMATIONS & INTERACTIONS
    ========================================= */
 
+/* --- Dynamic Global Hover for Buttons/Nav --- */
+.hover-brand {
+    @apply transition-all duration-300 ease-out cursor-pointer;
+}
+
+.hover-brand:hover {
+    background-color: var(--hover-bg) !important;
+    color: var(--hover-text) !important;
+}
+
+/* --- Upgraded Card Hover --- */
 .card-hover-effect {
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .card-hover-effect:hover {
     transform: translateY(-3px);
-    border-color: #a5b4fc;
-    box-shadow: 0 12px 24px -8px rgba(99, 102, 241, 0.15);
-}
-
-[data-theme='dark'] .card-hover-effect:hover {
-    border-color: #4f46e5;
+    border-color: var(--hover-border);
+    box-shadow: var(--shadow-hover);
 }
 
 /* --- Standard Fade --- */
@@ -282,30 +308,21 @@ textarea:focus {
    5. CRITICAL OVERRIDES
    ========================================= */
 
-/* Force Red Border on Error (Overrides Global Input Styles) */
 .input-error,
 .textarea-error {
     border-color: #ef4444 !important;
-    /* Red-500 */
     background-color: #fef2f2 !important;
-    /* Red-50 */
     color: #991b1b !important;
-    /* Red-800 */
 }
 
-/* Fix Dark Mode Errors */
 [data-theme='dark'] .input-error,
 [data-theme='dark'] .textarea-error {
     border-color: #ef4444 !important;
     background-color: #450a0a !important;
-    /* Red-950 */
     color: #fecaca !important;
-    /* Red-200 */
 }
 
-/* Fix Placeholder Color in Error State */
 .input-error::placeholder,
 .textarea-error::placeholder {
     color: #fca5a5 !important;
-    /* Red-300 */
 }
