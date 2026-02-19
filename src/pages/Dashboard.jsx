@@ -28,7 +28,6 @@ export default function Dashboard() {
   const [isScanning, setIsScanning] = useState(false);
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
 
-  // VIEW MODE STATE
   const [viewMode, setViewMode] = useState(() => {
     return localStorage.getItem('dashboardViewMode') || 'list';
   });
@@ -130,7 +129,6 @@ export default function Dashboard() {
     }
   };
 
-  // REUSABLE FUNCTION to clear filters (so both buttons do exactly the same thing)
   const clearFilters = () => {
     setStatusFilter('ALL');
     setSearchQuery('');
@@ -150,15 +148,15 @@ export default function Dashboard() {
         </div>
 
         <div className="flex-none flex items-center gap-1 sm:gap-2">
-          <button className="btn btn-sm btn-circle btn-ghost text-[var(--text-muted)] hover-brand" onClick={() => setIsScanning(true)} title="Scan QR Code">
+          <button className="btn btn-sm btn-circle btn-ghost text-[var(--text-muted)] hover:text-indigo-500 hover:bg-[var(--bg-subtle)] transition-colors" onClick={() => setIsScanning(true)} title="Scan QR Code">
             <QrCode size={20} />
           </button>
 
-          <button className="btn btn-sm btn-ghost rounded-full px-4 gap-2 text-[var(--text-muted)] font-bold hidden md:flex hover-brand" onClick={() => navigate('/customers')}>
+          <button className="btn btn-sm btn-ghost rounded-full px-4 gap-2 text-[var(--text-muted)] font-bold hidden md:flex hover:bg-[var(--bg-subtle)] hover:text-[var(--text-main)] transition-colors" onClick={() => navigate('/customers')}>
             <Users size={18} /> Customers
           </button>
 
-          <button className="btn btn-sm btn-ghost rounded-full px-4 gap-2 text-[var(--text-muted)] font-bold hidden md:flex hover-brand" onClick={() => navigate('/inventory')}>
+          <button className="btn btn-sm btn-ghost rounded-full px-4 gap-2 text-[var(--text-muted)] font-bold hidden md:flex hover:bg-[var(--bg-subtle)] hover:text-[var(--text-main)] transition-colors" onClick={() => navigate('/inventory')}>
             <Package size={18} /> Inventory
           </button>
 
@@ -166,32 +164,64 @@ export default function Dashboard() {
             <Plus size={18} strokeWidth={3} /> <span className="hidden md:inline font-bold">New Ticket</span>
           </button>
 
-          <button className="btn btn-sm btn-ghost btn-circle text-[var(--text-muted)] hover-brand" onClick={toggleTheme} title="Toggle Theme">
+          <button className="btn btn-sm btn-ghost btn-circle text-[var(--text-muted)] hover:text-indigo-500 hover:bg-[var(--bg-subtle)] transition-colors" onClick={toggleTheme} title="Toggle Theme">
             {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
           </button>
 
+          {/* --- UPGRADED PROFILE DROPDOWN --- */}
           <div className="dropdown dropdown-end ml-1">
-            <div tabIndex={0} role="button" className="btn btn-sm btn-ghost btn-circle avatar placeholder hover-brand border border-[var(--border-color)]">
-              <div className="bg-slate-800 dark:bg-slate-700 text-white rounded-full w-8 md:w-9 shadow-sm">
-                <span className="text-xs md:text-sm font-bold">{currentUser.initial}</span>
+            <div tabIndex={0} role="button" className="btn btn-sm btn-ghost btn-circle avatar placeholder hover:bg-transparent border-none">
+              <div className="bg-[var(--bg-subtle)] text-indigo-600 dark:text-indigo-400 border border-[var(--border-color)] rounded-full w-9 h-9 shadow-inner hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:border-indigo-200 transition-all flex items-center justify-center">
+                <span className="text-sm font-black">{currentUser.initial}</span>
               </div>
             </div>
-            <ul tabIndex={0} className="mt-4 z-[1] p-2 shadow-2xl menu menu-sm dropdown-content rounded-xl w-60 bg-[var(--bg-surface)] border border-[var(--border-color)]">
-              <li className="menu-title px-4 py-2 border-b border-[var(--border-color)] mb-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Signed In As</span>
-              </li>
-              <li className="px-2">
-                <div className="flex flex-col gap-1 items-start p-2">
-                  <span className="font-bold text-sm truncate w-full text-[var(--text-main)]">{currentUser.email}</span>
-                  <span className="badge badge-sm badge-neutral uppercase font-bold text-[10px] text-white">{currentUser.role}</span>
+
+            <ul tabIndex={0} className="mt-4 z-[50] p-3 shadow-2xl menu menu-sm dropdown-content rounded-2xl w-64 bg-[var(--bg-surface)] border border-[var(--border-color)] animate-pop">
+
+              {/* Premium ID Card Header */}
+              <div className="p-3.5 bg-[var(--bg-subtle)] rounded-xl border border-[var(--border-color)] shadow-inner mb-3 flex flex-col gap-1.5">
+                <span className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">Signed in as</span>
+                <span className="font-bold text-sm truncate w-full text-[var(--text-main)] leading-tight">{currentUser.email}</span>
+                <div className="flex mt-1.5">
+                  <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest shadow-md ${currentUser.role === 'admin' ? 'bg-purple-500 text-white shadow-purple-500/30' :
+                      currentUser.role === 'manager' ? 'bg-indigo-500 text-white shadow-indigo-500/30' :
+                        'bg-slate-500 text-white shadow-slate-500/30'
+                    }`}>
+                    {currentUser.role}
+                  </span>
                 </div>
+              </div>
+
+              {/* Mobile Only Navigation */}
+              <li className="md:hidden">
+                <button onClick={() => navigate('/customers')} className="font-bold text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-subtle)] py-2.5 rounded-lg transition-all">
+                  <Users size={16} className="text-indigo-500" /> Customer Database
+                </button>
               </li>
-              <div className="divider my-1"></div>
-              <li><button onClick={() => navigate('/customers')} className="font-bold text-[var(--text-main)] md:hidden"><Users size={16} /> Customer Database</button></li>
-              <li><button onClick={() => navigate('/inventory')} className="font-bold text-[var(--text-main)] md:hidden"><Package size={16} /> Inventory</button></li>
-              {isManagement && <li><button onClick={() => navigate('/team')} className="font-bold text-indigo-600"><Users size={16} /> Manage Team</button></li>}
-              <div className="divider my-1"></div>
-              <li><button onClick={handleLogout} className="text-red-600 font-bold"><LogOut size={16} /> Logout</button></li>
+              <li className="md:hidden">
+                <button onClick={() => navigate('/inventory')} className="font-bold text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-subtle)] py-2.5 rounded-lg transition-all">
+                  <Package size={16} className="text-indigo-500" /> Inventory
+                </button>
+              </li>
+
+              {/* Management Team Button */}
+              {isManagement && (
+                <li>
+                  <button onClick={() => navigate('/team')} className="font-bold text-[var(--text-muted)] hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 py-2.5 rounded-lg transition-all">
+                    <Users size={16} className="text-indigo-500" /> Manage Team
+                  </button>
+                </li>
+              )}
+
+              {/* Dashed Divider */}
+              <div className="border-t-2 border-dashed border-[var(--border-color)] my-2 mx-1"></div>
+
+              {/* Logout Action */}
+              <li>
+                <button onClick={handleLogout} className="font-bold text-[var(--text-muted)] hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 py-2.5 rounded-lg transition-all">
+                  <LogOut size={16} className="text-red-500" /> Logout
+                </button>
+              </li>
             </ul>
           </div>
         </div>
@@ -213,7 +243,7 @@ export default function Dashboard() {
           </div>
           <button
             onClick={() => setIsMobileFilterOpen(!isMobileFilterOpen)}
-            className={`btn rounded-full px-5 h-12 transition-all ${isMobileFilterOpen ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30 border-none hover:scale-105 hover:bg-indigo-700' : 'btn-ghost bg-[var(--bg-surface)] border border-[var(--border-color)] hover-brand'}`}
+            className={`btn rounded-full px-5 h-12 transition-all ${isMobileFilterOpen ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30 border-none hover:scale-105 hover:bg-indigo-700' : 'btn-ghost bg-[var(--bg-surface)] border border-[var(--border-color)] hover:bg-[var(--bg-subtle)]'}`}
           >
             <Filter size={18} />
             {isMobileFilterOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
@@ -266,7 +296,6 @@ export default function Dashboard() {
               <div className="flex justify-between items-center mb-6 border-b border-[var(--border-color)] pb-4">
                 <h3 className="font-black text-[var(--text-main)] flex gap-2 items-center text-lg"><Filter size={20} className="text-indigo-500" /> Filters</h3>
 
-                {/* --- 1. UPDATED SIDEBAR CLEAR BUTTON --- */}
                 {(statusFilter !== 'ALL' || searchQuery) && (
                   <button
                     onClick={clearFilters}
@@ -353,7 +382,6 @@ export default function Dashboard() {
                 {statusFilter === 'BACKORDER' ? 'WAITING (PARTS)' : statusFilter.replace('_', ' ')}
               </div>
 
-              {/* --- 2. UPDATED VIEWING BAR CLEAR BUTTON (Now uses clearFilters) --- */}
               {(statusFilter !== 'ALL' || searchQuery) && (
                 <button
                   onClick={clearFilters}
@@ -399,7 +427,6 @@ export default function Dashboard() {
                     <div className="col-span-full text-center p-12 border-2 border-dashed border-[var(--border-color)] rounded-2xl bg-[var(--bg-surface)]">
                       <p className="font-bold text-xl text-[var(--text-main)]">No tickets found</p>
                       <p className="text-sm mt-2 text-[var(--text-muted)]">Adjust your filters to see results.</p>
-                      {/* Empty state "Clear Filters" button uses the unified function too */}
                       <button className="btn btn-outline btn-sm mt-6 text-[var(--text-main)]" onClick={clearFilters}>Clear Filters</button>
                     </div>
                   )}

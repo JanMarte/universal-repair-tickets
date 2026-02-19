@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
 import {
-    ArrowLeft, Shield, User, Briefcase, Calendar, Mail,
+    ArrowLeft, Shield, User, Users, Briefcase, Calendar, Mail,
     Search, UserPlus, X, Copy, CheckCircle, Info, Filter,
-    Activity, DollarSign, Clock, FileText
+    Activity, DollarSign, Clock, FileText, ChevronRight, Moon, Sun
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../context/ToastProvider';
@@ -15,6 +15,9 @@ export default function Team() {
     const [loading, setLoading] = useState(true);
     const [currentUser, setCurrentUser] = useState(null);
 
+    // Theme State
+    const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light');
+
     // Modal & Search State
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [activeTab, setActiveTab] = useState('search');
@@ -23,7 +26,7 @@ export default function Team() {
     const [foundUser, setFoundUser] = useState(null);
     const [searchLoading, setSearchLoading] = useState(false);
 
-    // --- NEW: STATS STATE ---
+    // Stats State
     const [selectedMember, setSelectedMember] = useState(null);
     const [memberStats, setMemberStats] = useState(null);
     const [statsLoading, setStatsLoading] = useState(false);
@@ -34,6 +37,14 @@ export default function Team() {
     const navigate = useNavigate();
     const { addToast } = useToast();
     const inviteLink = `${window.location.origin}/login`;
+
+    // Handle Theme Changes
+    useEffect(() => {
+        document.documentElement.setAttribute('data-theme', theme);
+        if (theme === 'dark') document.documentElement.classList.add('dark');
+        else document.documentElement.classList.remove('dark');
+        localStorage.setItem('theme', theme);
+    }, [theme]);
 
     useEffect(() => {
         fetchCurrentUser();
@@ -58,7 +69,6 @@ export default function Team() {
         setLoading(false);
     }
 
-    // --- NEW: FETCH STATS FUNCTION ---
     async function openMemberStats(member) {
         setSelectedMember(member);
         setStatsLoading(true);
@@ -75,18 +85,11 @@ export default function Team() {
             const active = tickets?.filter(t => t.status !== 'completed').length || 0;
             const revenue = tickets?.filter(t => t.status === 'completed').reduce((sum, t) => sum + (t.estimate_total || 0), 0) || 0;
 
-            // 2. Get Recent Audit Logs (Activity)
-            // Note: This relies on us having captured 'actor_name' or stored user_id in metadata. 
-            // Since our audit log stores 'actor_name', we will try to match loosely or by specific logs if linked.
-            //Ideally, audit_logs should have a 'user_id' column. 
-            // For now, we'll try to match by name if possible, or skip if your audit_logs table structure doesn't link IDs.
-            // *Assumption*: You might not have user_id in audit_logs yet. If not, this part might return empty.
-
-            // Let's try searching by the name stored in the profile
+            // 2. Get Recent Audit Logs
             const { data: logs } = await supabase
                 .from('audit_logs')
                 .select('*')
-                .ilike('actor_name', `%${member.full_name?.split(' ')[0]}%`) // Loose match on first name
+                .ilike('actor_name', `%${member.full_name?.split(' ')[0]}%`)
                 .order('created_at', { ascending: false })
                 .limit(5);
 
@@ -155,128 +158,166 @@ export default function Team() {
         }
     };
 
-    const getRoleBadge = (role) => {
-        switch (role) {
-            case 'admin': return 'bg-purple-100 text-purple-700 border-purple-200';
-            case 'manager': return 'bg-indigo-100 text-indigo-700 border-indigo-200';
-            case 'employee': return 'bg-blue-100 text-blue-700 border-blue-200';
-            default: return 'bg-slate-100 text-slate-600 border-slate-200';
-        }
-    };
-
     const copyToClipboard = (text) => {
         navigator.clipboard.writeText(text);
         addToast("Copied to clipboard", "success");
     };
 
-    const UserCard = ({ user, isSearchResult = false }) => (
-        <div className={`p-5 rounded-2xl border flex flex-col justify-between h-full transition-all 
-        ${isSearchResult
-                ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800 shadow-md scale-100'
-                : 'bg-[var(--bg-surface)] border-[var(--border-color)] shadow-sm hover:shadow-md'
-            }`}>
-            <div>
-                <div className="flex justify-between items-start mb-4">
-                    <div className={`p-3 rounded-xl ${user.role === 'admin' ? 'bg-purple-50 text-purple-600' : user.role === 'manager' ? 'bg-indigo-50 text-indigo-600' : 'bg-[var(--bg-subtle)] text-[var(--text-muted)]'}`}>
-                        {user.role === 'admin' ? <Shield size={24} /> : user.role === 'manager' ? <Briefcase size={24} /> : <User size={24} />}
+    const toggleTheme = () => {
+        setTheme(prev => prev === 'light' ? 'dark' : 'light');
+    };
+
+    // Premium Theme Generator for Roles
+    const getRoleTheme = (role) => {
+        switch (role) {
+            case 'admin': return { border: 'border-l-purple-500', pill: 'bg-purple-500 text-white shadow-purple-500/30', iconText: 'text-purple-600 dark:text-purple-400', icon: <Shield size={20} /> };
+            case 'manager': return { border: 'border-l-indigo-500', pill: 'bg-indigo-500 text-white shadow-indigo-500/30', iconText: 'text-indigo-600 dark:text-indigo-400', icon: <Briefcase size={20} /> };
+            case 'employee': return { border: 'border-l-emerald-500', pill: 'bg-emerald-500 text-white shadow-emerald-500/30', iconText: 'text-emerald-600 dark:text-emerald-400', icon: <User size={20} /> };
+            default: return { border: 'border-l-slate-500', pill: 'bg-slate-500 text-white shadow-slate-500/30', iconText: 'text-[var(--text-muted)]', icon: <User size={20} /> };
+        }
+    };
+
+    const UserCard = ({ user, isSearchResult = false }) => {
+        const theme = getRoleTheme(user.role);
+
+        return (
+            <div className={`p-6 rounded-xl flex flex-col justify-between h-full transition-all duration-300 border-l-[4px] border border-[var(--border-color)] group
+            ${isSearchResult
+                    ? 'bg-indigo-50/50 dark:bg-indigo-900/10 border-indigo-200 dark:border-indigo-800 shadow-md scale-[1.02]'
+                    : `bg-[var(--bg-surface)] hover:shadow-md hover:-translate-y-0.5 ${theme.border}`
+                }`}>
+                
+                <div>
+                    {/* Header Row */}
+                    <div className="flex justify-between items-center mb-5">
+                        <div className={`inline-flex items-center justify-center px-3 py-1.5 font-black uppercase text-[10px] tracking-widest rounded-md transition-all shadow-md ${theme.pill}`}>
+                            {user.role}
+                        </div>
+                        <div className={`w-10 h-10 rounded-full bg-[var(--bg-subtle)] border border-[var(--border-color)] shadow-inner flex items-center justify-center transition-colors ${theme.iconText} group-hover:scale-110`}>
+                            {theme.icon}
+                        </div>
                     </div>
-                    <span className={`badge border font-bold uppercase text-[10px] tracking-wider py-3 ${getRoleBadge(user.role)}`}>
-                        {user.role}
-                    </span>
+
+                    {/* Identity */}
+                    <div className="mb-4">
+                        <h3 className="font-black text-xl text-[var(--text-main)] truncate mb-1 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                            {user.full_name || 'No Name Set'}
+                        </h3>
+                    </div>
+
+                    {/* Recessed Info Box */}
+                    <div className="p-3.5 mb-6 rounded-lg bg-[var(--bg-subtle)] shadow-inner flex flex-col gap-2.5 border border-[var(--border-color)]">
+                        <div className="flex items-center gap-2 text-xs font-bold text-[var(--text-muted)] cursor-pointer hover:text-[var(--text-main)] transition-colors" onClick={() => copyToClipboard(user.email)}>
+                            <Mail size={14} className="text-indigo-500 flex-shrink-0" />
+                            <span className="truncate flex-1">{user.email}</span>
+                            <Copy size={12} className="opacity-50" />
+                        </div>
+                        <div className="flex items-center gap-2 text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">
+                            <Calendar size={14} className="text-amber-500" />
+                            Joined {format(new Date(user.created_at), 'MMM d, yyyy')}
+                        </div>
+                    </div>
                 </div>
 
-                <div className="mb-6 space-y-2">
-                    <div className="font-bold text-lg text-[var(--text-main)] truncate">
-                        {user.full_name || 'No Name Set'}
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-[var(--text-muted)] font-medium truncate group cursor-pointer" onClick={() => copyToClipboard(user.email)}>
-                        <Mail size={14} className="flex-shrink-0" />
-                        <span className="truncate">{user.email}</span>
-                        <Copy size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-[var(--text-muted)] font-medium">
-                        <Calendar size={14} />
-                        Joined {format(new Date(user.created_at), 'MMM d, yyyy')}
-                    </div>
+                {/* Footer Actions - Dashed Divider */}
+                <div className="pt-4 border-t-2 border-dashed border-[var(--border-color)] space-y-2 mt-auto">
+                    {!isSearchResult && (
+                        <button onClick={() => openMemberStats(user)} className="btn btn-sm btn-ghost w-full font-bold text-[var(--text-muted)] hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 border border-transparent hover:border-indigo-200 dark:hover:border-indigo-800 transition-all">
+                            <Activity size={14} /> View Performance
+                        </button>
+                    )}
+
+                    {user.role === 'customer' && (
+                        <button onClick={() => handleRoleChange(user.id, 'employee')} className="btn btn-sm btn-gradient w-full shadow-md text-white font-bold tracking-wide">
+                            Promote to Staff
+                        </button>
+                    )}
+
+                    {user.role === 'employee' && (
+                        <div className="flex gap-2">
+                            <button onClick={() => handleRoleChange(user.id, 'customer')} className="btn btn-sm btn-ghost text-[var(--text-muted)] flex-1 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all">Remove</button>
+                            <button onClick={() => handleRoleChange(user.id, 'manager')} className="btn btn-sm btn-ghost text-indigo-600 flex-1 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/30 dark:hover:bg-indigo-900/50 transition-all">Promote</button>
+                        </div>
+                    )}
+
+                    {user.role === 'manager' && (
+                        <button onClick={() => handleRoleChange(user.id, 'employee')} className="btn btn-sm btn-ghost w-full text-[var(--text-muted)] hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-all">
+                            Demote to Employee
+                        </button>
+                    )}
                 </div>
             </div>
-
-            <div className="pt-4 border-t border-[var(--border-color)] space-y-2">
-                {/* --- NEW: INSIGHTS BUTTON --- */}
-                {!isSearchResult && (
-                    <button onClick={() => openMemberStats(user)} className="btn btn-sm btn-outline w-full border-dashed border-slate-300 dark:border-slate-600 text-[var(--text-muted)] hover:bg-[var(--bg-subtle)]">
-                        <Activity size={14} /> View Activity
-                    </button>
-                )}
-
-                {user.role === 'customer' && (
-                    <button onClick={() => handleRoleChange(user.id, 'employee')} className="btn btn-sm btn-primary w-full shadow-lg">Promote to Staff</button>
-                )}
-
-                {user.role === 'employee' && (
-                    <div className="flex gap-2">
-                        <button onClick={() => handleRoleChange(user.id, 'customer')} className="btn btn-sm btn-ghost text-red-500 flex-1 hover:bg-red-50">Remove</button>
-                        <button onClick={() => handleRoleChange(user.id, 'manager')} className="btn btn-sm btn-ghost text-indigo-600 flex-1 bg-indigo-50 dark:bg-indigo-900/20">Promote</button>
-                    </div>
-                )}
-
-                {user.role === 'manager' && (
-                    <button onClick={() => handleRoleChange(user.id, 'employee')} className="btn btn-sm btn-ghost text-orange-500 w-full hover:bg-orange-50 dark:hover:bg-orange-900/20">Demote to Employee</button>
-                )}
-            </div>
-        </div>
-    );
+        );
+    };
 
     return (
-        <div className="min-h-screen p-4 md:p-8 font-sans pb-24">
+        <div className="min-h-screen p-4 md:p-6 font-sans pb-24 transition-colors duration-300">
 
-            {/* HEADER */}
-            <div className="rounded-2xl p-6 mb-8 bg-[var(--bg-surface)] border border-[var(--border-color)] shadow-sm">
-                <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-                    <div className="flex items-center gap-4 w-full md:w-auto">
-                        <button onClick={() => navigate('/dashboard')} className="btn btn-circle btn-ghost"><ArrowLeft /></button>
-                        <div>
-                            <h1 className="text-2xl font-black text-[var(--text-main)]">Team Management</h1>
-                            <div className="flex items-center gap-2">
-                                <p className="text-sm text-[var(--text-muted)]">Manage access and roles.</p>
-                                <button onClick={() => setShowRoleGuide(!showRoleGuide)} className="text-indigo-500 text-xs font-bold hover:underline flex items-center gap-1">
-                                    <Info size={12} /> {showRoleGuide ? 'Hide Guide' : 'Role Guide'}
-                                </button>
-                            </div>
+            {/* NAVBAR */}
+            <div className="navbar rounded-2xl mb-6 sticky top-2 z-40 flex justify-between shadow-sm backdrop-blur-md bg-[var(--bg-surface)] border border-[var(--border-color)] px-3 py-2 animate-fade">
+                <div className="flex items-center">
+                    <button onClick={() => navigate('/dashboard')} className="btn btn-sm btn-ghost gap-2 text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-main)] transition-colors rounded-lg">
+                        <ArrowLeft size={18} /> <span className="hidden md:inline font-bold">Dashboard</span>
+                    </button>
+                </div>
+                
+                {/* Theme Toggle Button */}
+                <div className="flex items-center gap-2">
+                    <button onClick={toggleTheme} className="btn btn-sm btn-circle btn-ghost text-[var(--text-muted)] hover:text-indigo-500 hover:bg-[var(--bg-subtle)] transition-colors" title="Toggle Theme">
+                        {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+                    </button>
+                </div>
+            </div>
+
+            {/* HEADER & SEARCH */}
+            <div className="rounded-2xl p-6 md:p-8 mb-6 bg-[var(--bg-surface)] border border-[var(--border-color)] shadow-sm animate-fade-in-up">
+                <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                    <div>
+                        <h1 className="text-2xl md:text-3xl font-black text-[var(--text-main)] flex items-center gap-3 tracking-tight mb-2">
+                            <Users size={28} className="text-indigo-600" /> Team Management
+                        </h1>
+                        <div className="flex items-center gap-3 pl-10">
+                            <p className="text-sm font-medium text-[var(--text-muted)]">Manage access, roles, and performance.</p>
+                            <span className="text-slate-300 dark:text-slate-600">|</span>
+                            <button onClick={() => setShowRoleGuide(!showRoleGuide)} className="text-indigo-500 text-xs font-bold hover:text-indigo-600 transition-colors flex items-center gap-1 bg-indigo-50 dark:bg-indigo-900/20 px-2 py-1 rounded-md">
+                                <Info size={12} /> {showRoleGuide ? 'Hide Guide' : 'Role Guide'}
+                            </button>
                         </div>
                     </div>
 
                     <div className="flex gap-3 w-full md:w-auto">
-                        <div className="relative flex-1 md:w-64">
+                        {/* Premium Recessed Search */}
+                        <div className="relative flex-1 md:w-72 group">
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)] group-focus-within:text-indigo-500 transition-colors" size={18} />
                             <input
                                 type="text"
                                 placeholder="Find staff member..."
-                                className="input input-bordered w-full pl-9 h-12 bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)]"
+                                className="input input-bordered w-full pl-11 h-12 bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] font-medium shadow-inner transition-all focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500"
                                 value={rosterSearch}
                                 onChange={(e) => setRosterSearch(e.target.value)}
                             />
-                            <Search className="absolute left-3 top-3.5 text-slate-400" size={18} />
                         </div>
 
-                        <button onClick={() => setIsAddModalOpen(true)} className="btn btn-gradient h-12 text-white shadow-md gap-2 flex-none">
-                            <UserPlus size={18} /> <span className="hidden md:inline">Add Staff</span>
+                        <button onClick={() => setIsAddModalOpen(true)} className="btn btn-gradient h-12 text-white shadow-lg gap-2 flex-none px-6 hover:scale-105 transition-all rounded-xl border-none">
+                            <UserPlus size={18} strokeWidth={2.5} /> <span className="hidden md:inline font-bold tracking-wide">Add Staff</span>
                         </button>
                     </div>
                 </div>
 
+                {/* ROLE GUIDE - Recessed Cards */}
                 {showRoleGuide && (
-                    <div className="mt-6 p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl border border-indigo-100 dark:border-indigo-800 grid grid-cols-1 md:grid-cols-3 gap-4 animate-slide-down">
-                        <div className="p-3 bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-indigo-100 dark:border-slate-700">
-                            <div className="font-bold text-blue-600 mb-1 flex items-center gap-2"><User size={14} /> Employee</div>
-                            <p className="text-xs text-[var(--text-muted)]">Can view and edit tickets. Cannot delete records or access team management.</p>
+                    <div className="mt-6 pt-6 border-t-2 border-dashed border-[var(--border-color)] grid grid-cols-1 md:grid-cols-3 gap-4 animate-slide-down">
+                        <div className="p-4 bg-[var(--bg-subtle)] rounded-xl border border-[var(--border-color)] shadow-inner">
+                            <div className="font-black text-[10px] uppercase tracking-widest text-emerald-600 mb-2 flex items-center gap-1.5"><User size={14} /> Employee</div>
+                            <p className="text-xs font-medium text-[var(--text-muted)] leading-relaxed">Can view and edit tickets. Cannot delete records or access team management.</p>
                         </div>
-                        <div className="p-3 bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-indigo-100 dark:border-slate-700">
-                            <div className="font-bold text-indigo-600 mb-1 flex items-center gap-2"><Briefcase size={14} /> Manager</div>
-                            <p className="text-xs text-[var(--text-muted)]">Can delete records, view reports, and manage employees.</p>
+                        <div className="p-4 bg-[var(--bg-subtle)] rounded-xl border border-[var(--border-color)] shadow-inner">
+                            <div className="font-black text-[10px] uppercase tracking-widest text-indigo-600 mb-2 flex items-center gap-1.5"><Briefcase size={14} /> Manager</div>
+                            <p className="text-xs font-medium text-[var(--text-muted)] leading-relaxed">Can delete records, view performance reports, and manage basic employees.</p>
                         </div>
-                        <div className="p-3 bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-indigo-100 dark:border-slate-700">
-                            <div className="font-bold text-purple-600 mb-1 flex items-center gap-2"><Shield size={14} /> Admin</div>
-                            <p className="text-xs text-[var(--text-muted)]">Full system access. Can promote/demote managers.</p>
+                        <div className="p-4 bg-[var(--bg-subtle)] rounded-xl border border-[var(--border-color)] shadow-inner">
+                            <div className="font-black text-[10px] uppercase tracking-widest text-purple-600 mb-2 flex items-center gap-1.5"><Shield size={14} /> Admin</div>
+                            <p className="text-xs font-medium text-[var(--text-muted)] leading-relaxed">Full system access. Can promote or demote managers and control settings.</p>
                         </div>
                     </div>
                 )}
@@ -285,16 +326,17 @@ export default function Team() {
             {/* ROSTER GRID */}
             <div>
                 {loading ? (
-                    <div className="flex justify-center mt-10"><span className="loading loading-spinner loading-lg text-primary"></span></div>
+                    <div className="flex justify-center mt-20"><span className="loading loading-spinner loading-lg text-indigo-500"></span></div>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 animate-fade">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-fade">
                         {filteredTeam.map(user => (
                             <UserCard key={user.id} user={user} />
                         ))}
                         {filteredTeam.length === 0 && (
-                            <div className="col-span-full text-center p-12 text-[var(--text-muted)] border-2 border-dashed border-[var(--border-color)] rounded-xl">
-                                <Filter size={32} className="mx-auto mb-2 opacity-50" />
-                                No staff members found matching "{rosterSearch}".
+                            <div className="col-span-full text-center p-16 text-[var(--text-muted)] bg-[var(--bg-surface)] border-2 border-dashed border-[var(--border-color)] rounded-2xl shadow-sm">
+                                <Filter size={48} className="mx-auto mb-4 opacity-50" />
+                                <h3 className="font-bold text-lg text-[var(--text-main)] mb-1">No staff found</h3>
+                                <p className="text-sm">Try adjusting your search terms.</p>
                             </div>
                         )}
                     </div>
@@ -303,118 +345,147 @@ export default function Team() {
 
             {/* --- ADD STAFF MODAL --- */}
             {isAddModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade">
-                    <div className="bg-[var(--bg-surface)] w-full max-w-lg rounded-2xl shadow-2xl border border-[var(--border-color)] flex flex-col overflow-hidden animate-pop">
-                        <div className="p-5 border-b border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-subtle)]">
-                            <h2 className="text-lg font-black text-[var(--text-main)] flex items-center gap-2">
-                                <Shield size={18} className="text-purple-600" /> Add Team Member
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade">
+                    <div className="bg-[var(--bg-surface)] w-full max-w-lg rounded-2xl shadow-2xl border border-[var(--border-color)] flex flex-col overflow-hidden animate-pop ring-1 ring-white/20">
+                        
+                        <div className="p-5 border-b-2 border-dashed border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-surface)]">
+                            <h2 className="text-xl font-black text-[var(--text-main)] flex items-center gap-2 tracking-tight">
+                                <UserPlus size={22} className="text-indigo-600" /> Add Team Member
                             </h2>
-                            <button onClick={() => { setIsAddModalOpen(false); setFoundUser(null); setSearchEmail(''); }} className="btn btn-sm btn-circle btn-ghost">
+                            <button onClick={() => { setIsAddModalOpen(false); setFoundUser(null); setSearchEmail(''); }} className="btn btn-sm btn-circle btn-ghost text-[var(--text-muted)] hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all">
                                 <X size={20} />
                             </button>
                         </div>
-                        <div className="p-2 bg-[var(--bg-subtle)] border-b border-[var(--border-color)]">
-                            <div className="flex bg-[var(--bg-surface)] p-1 rounded-lg border border-[var(--border-color)]">
-                                <button onClick={() => setActiveTab('search')} className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${activeTab === 'search' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}>Promote Existing</button>
-                                <button onClick={() => setActiveTab('invite')} className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${activeTab === 'invite' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}>Invite New</button>
+                        
+                        <div className="p-6 bg-[var(--bg-subtle)]">
+                            {/* Premium Segmented Control */}
+                            <div className="flex bg-[var(--bg-subtle)] p-1.5 rounded-xl mb-6 shadow-inner border border-[var(--border-color)]">
+                                <button onClick={() => setActiveTab('search')} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all flex justify-center gap-2 ${activeTab === 'search' ? 'bg-[var(--bg-surface)] text-indigo-600 shadow-sm ring-1 ring-black/5 dark:ring-white/5' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>
+                                    <Search size={16} /> Promote Existing
+                                </button>
+                                <button onClick={() => setActiveTab('invite')} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all flex justify-center gap-2 ${activeTab === 'invite' ? 'bg-[var(--bg-surface)] text-indigo-600 shadow-sm ring-1 ring-black/5 dark:ring-white/5' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>
+                                    <Mail size={16} /> Invite New
+                                </button>
                             </div>
-                        </div>
-                        <div className="p-6">
-                            {activeTab === 'search' ? (
-                                <>
-                                    <form onSubmit={handleSearch} className="flex gap-2 mb-6">
-                                        <input type="email" placeholder="User's email address..." className="input input-bordered flex-1 font-medium bg-[var(--bg-surface)] text-[var(--text-main)]" value={searchEmail} onChange={(e) => setSearchEmail(e.target.value)} />
-                                        <button type="submit" className="btn btn-neutral" disabled={searchLoading}>{searchLoading ? <span className="loading loading-spinner"></span> : <Search size={18} />}</button>
-                                    </form>
-                                    {foundUser && (
-                                        <div className="animate-fade-in-up">
-                                            <div className="text-xs font-bold uppercase text-green-600 mb-2 flex items-center gap-1"><CheckCircle size={12} /> User Found</div>
-                                            <UserCard user={foundUser} isSearchResult={true} />
+
+                            <div className="bg-[var(--bg-surface)] p-5 rounded-xl border border-[var(--border-color)] shadow-sm">
+                                {activeTab === 'search' ? (
+                                    <>
+                                        <form onSubmit={handleSearch} className="flex gap-2 mb-2">
+                                            <input type="email" placeholder="User's email address..." className="input input-bordered flex-1 font-medium bg-[var(--bg-subtle)] text-[var(--text-main)] shadow-inner focus:bg-[var(--bg-surface)] focus:border-indigo-500 transition-all" value={searchEmail} onChange={(e) => setSearchEmail(e.target.value)} />
+                                            <button type="submit" className="btn btn-neutral" disabled={searchLoading}>{searchLoading ? <span className="loading loading-spinner"></span> : <Search size={18} />}</button>
+                                        </form>
+                                        
+                                        {foundUser ? (
+                                            <div className="mt-6 animate-fade-in-up">
+                                                <div className="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-3 flex items-center gap-1.5"><CheckCircle size={14} /> Match Found</div>
+                                                <UserCard user={foundUser} isSearchResult={true} />
+                                            </div>
+                                        ) : (
+                                            !searchLoading && searchEmail && <div className="text-center p-6 text-[var(--text-muted)] text-sm font-medium mt-4 bg-[var(--bg-subtle)] rounded-lg border border-[var(--border-color)] shadow-inner">Enter a customer's email to promote them to staff.</div>
+                                        )}
+                                    </>
+                                ) : (
+                                    <div className="text-center space-y-6 animate-fade py-2">
+                                        <div className="p-4 bg-white rounded-xl border border-[var(--border-color)] w-48 mx-auto shadow-sm">
+                                            <img src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${inviteLink}`} alt="Invite QR" className="w-full h-full" />
                                         </div>
-                                    )}
-                                    {!foundUser && !searchLoading && searchEmail && <div className="text-center p-6 text-[var(--text-muted)] text-sm">Search for a customer to promote them to staff.</div>}
-                                </>
-                            ) : (
-                                <div className="text-center space-y-6 animate-fade">
-                                    <div className="p-4 bg-white rounded-xl border border-slate-200 w-48 mx-auto shadow-inner">
-                                        <img src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${inviteLink}`} alt="Invite QR" className="w-full h-full mix-blend-multiply" />
+                                        <div>
+                                            <h3 className="font-black text-lg text-[var(--text-main)] mb-1">Scan to Signup</h3>
+                                            <p className="text-sm font-medium text-[var(--text-muted)]">New staff can scan this to create their account.</p>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <input type="text" value={inviteLink} readOnly className="input input-bordered flex-1 bg-[var(--bg-subtle)] text-xs font-mono font-bold text-[var(--text-muted)] shadow-inner" />
+                                            <button onClick={() => { navigator.clipboard.writeText(inviteLink); addToast("Link copied!", "success"); }} className="btn btn-square btn-ghost border-[var(--border-color)] hover:bg-[var(--bg-subtle)] text-[var(--text-main)]"><Copy size={18} /></button>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <h3 className="font-bold text-[var(--text-main)] mb-1">Scan to Signup</h3>
-                                        <p className="text-xs text-[var(--text-muted)]">New staff can scan this to create their account.</p>
-                                    </div>
-                                    <div className="flex gap-2">
-                                        <input type="text" value={inviteLink} readOnly className="input input-bordered flex-1 bg-[var(--bg-subtle)] text-xs font-mono text-[var(--text-muted)]" />
-                                        <button onClick={() => { navigator.clipboard.writeText(inviteLink); addToast("Link copied!", "success"); }} className="btn btn-square btn-outline border-[var(--border-color)]"><Copy size={18} /></button>
-                                    </div>
-                                </div>
-                            )}
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* --- NEW: EMPLOYEE INSIGHTS MODAL --- */}
+            {/* --- EMPLOYEE INSIGHTS MODAL --- */}
             {selectedMember && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade">
-                    <div className="bg-[var(--bg-surface)] w-full max-w-lg rounded-2xl shadow-2xl border border-[var(--border-color)] flex flex-col overflow-hidden animate-pop">
-                        <div className="p-5 border-b border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-subtle)]">
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade">
+                    <div className="bg-[var(--bg-surface)] w-full max-w-xl rounded-2xl shadow-2xl border border-[var(--border-color)] flex flex-col overflow-hidden animate-pop ring-1 ring-white/20">
+                        
+                        <div className="p-5 border-b-2 border-dashed border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-surface)]">
                             <div>
-                                <h2 className="text-lg font-black text-[var(--text-main)]">{selectedMember.full_name || 'Staff'}</h2>
-                                <p className="text-xs text-[var(--text-muted)] font-bold uppercase tracking-wider">Performance Report</p>
+                                <h2 className="text-xl font-black text-[var(--text-main)] tracking-tight">{selectedMember.full_name || 'Staff'}</h2>
+                                <p className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest mt-1">Performance Report</p>
                             </div>
-                            <button onClick={() => setSelectedMember(null)} className="btn btn-sm btn-circle btn-ghost"><X size={20} /></button>
+                            <button onClick={() => setSelectedMember(null)} className="btn btn-sm btn-circle btn-ghost text-[var(--text-muted)] hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all">
+                                <X size={20} />
+                            </button>
                         </div>
 
-                        <div className="p-6 overflow-y-auto max-h-[70vh]">
+                        <div className="p-6 overflow-y-auto max-h-[70vh] bg-[var(--bg-subtle)]">
                             {statsLoading ? (
-                                <div className="py-10 text-center"><span className="loading loading-spinner text-primary"></span></div>
+                                <div className="py-12 text-center flex flex-col items-center gap-3">
+                                    <span className="loading loading-spinner loading-lg text-indigo-500"></span>
+                                    <span className="text-xs font-bold uppercase tracking-widest text-[var(--text-muted)]">Compiling Data</span>
+                                </div>
                             ) : memberStats ? (
                                 <div className="space-y-6">
-                                    {/* Stats Grid */}
+                                    
+                                    {/* Stats Grid - Recessed Premium Cards */}
                                     <div className="grid grid-cols-2 gap-4">
-                                        <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl border border-emerald-100 dark:border-emerald-800">
-                                            <div className="text-xs font-bold uppercase text-emerald-700 dark:text-emerald-400 mb-1">Revenue</div>
-                                            <div className="text-2xl font-black text-emerald-800 dark:text-emerald-200">{formatCurrency(memberStats.revenue)}</div>
+                                        <div className="p-5 bg-[var(--bg-surface)] rounded-xl border border-[var(--border-color)] shadow-sm flex items-center gap-4">
+                                            <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-500 rounded-lg shadow-inner">
+                                                <DollarSign size={24} />
+                                            </div>
+                                            <div>
+                                                <div className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] mb-1">Revenue</div>
+                                                <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 leading-none">{formatCurrency(memberStats.revenue)}</div>
+                                            </div>
                                         </div>
-                                        <div className="p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl border border-indigo-100 dark:border-indigo-800">
-                                            <div className="text-xs font-bold uppercase text-indigo-700 dark:text-indigo-400 mb-1">Completed Jobs</div>
-                                            <div className="text-2xl font-black text-indigo-800 dark:text-indigo-200">{memberStats.completed}</div>
+                                        <div className="p-5 bg-[var(--bg-surface)] rounded-xl border border-[var(--border-color)] shadow-sm flex items-center gap-4">
+                                            <div className="p-3 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-500 rounded-lg shadow-inner">
+                                                <CheckCircle size={24} />
+                                            </div>
+                                            <div>
+                                                <div className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] mb-1">Completed</div>
+                                                <div className="text-2xl font-black text-indigo-600 dark:text-indigo-400 leading-none">{memberStats.completed}</div>
+                                            </div>
                                         </div>
                                     </div>
 
                                     {/* Activity Log */}
-                                    <div>
-                                        <h3 className="text-xs font-bold uppercase text-[var(--text-muted)] tracking-wider mb-3 flex items-center gap-2">
-                                            <Clock size={14} /> Recent Activity
+                                    <div className="bg-[var(--bg-surface)] p-5 rounded-xl border border-[var(--border-color)] shadow-sm">
+                                        <h3 className="text-[10px] font-black uppercase text-[var(--text-muted)] tracking-widest mb-4 flex items-center gap-2 border-b-2 border-dashed border-[var(--border-color)] pb-3">
+                                            <Clock size={14} className="text-amber-500" /> Recent Activity
                                         </h3>
-                                        <div className="space-y-2">
+                                        
+                                        <div className="space-y-3">
                                             {memberStats.recentActivity && memberStats.recentActivity.length > 0 ? (
                                                 memberStats.recentActivity.map(log => (
-                                                    <div key={log.id} className="text-sm p-3 bg-[var(--bg-subtle)] rounded-lg border border-[var(--border-color)]">
-                                                        <div className="font-medium text-[var(--text-main)]">{log.details}</div>
-                                                        <div className="text-xs text-[var(--text-muted)] mt-1 flex justify-between">
-                                                            <span className="uppercase font-bold">{log.action}</span>
+                                                    <div key={log.id} className="p-3.5 bg-[var(--bg-subtle)] rounded-lg shadow-inner border border-[var(--border-color)]">
+                                                        <div className="font-medium text-[var(--text-main)] text-sm mb-2 leading-snug">{log.details}</div>
+                                                        <div className="text-[10px] font-black text-[var(--text-muted)] flex justify-between uppercase tracking-widest">
+                                                            <span className="text-indigo-500">{log.action}</span>
                                                             <span>{format(new Date(log.created_at), 'MMM d, h:mm a')}</span>
                                                         </div>
                                                     </div>
                                                 ))
                                             ) : (
-                                                <div className="text-center py-6 text-sm text-[var(--text-muted)] italic bg-[var(--bg-subtle)] rounded-lg">
-                                                    No recent activity found.
+                                                <div className="text-center py-8 bg-[var(--bg-subtle)] rounded-lg shadow-inner border border-[var(--border-color)]">
+                                                    <Activity size={32} className="mx-auto text-[var(--border-color)] mb-2" />
+                                                    <div className="text-sm font-bold text-[var(--text-main)]">No recent activity</div>
+                                                    <div className="text-xs text-[var(--text-muted)] mt-1">Logs will appear here when actions are taken.</div>
                                                 </div>
                                             )}
                                         </div>
                                     </div>
                                 </div>
                             ) : (
-                                <div className="text-center text-red-500">Failed to load data.</div>
+                                <div className="text-center text-red-500 font-bold p-8">Failed to load performance data.</div>
                             )}
                         </div>
                     </div>
                 </div>
             )}
-
         </div>
     );
 }

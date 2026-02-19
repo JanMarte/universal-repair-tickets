@@ -3,7 +3,7 @@ import { supabase } from '../supabaseClient';
 import { useNavigate } from 'react-router-dom';
 import {
     Search, Plus, Package, AlertTriangle, ArrowLeft,
-    Edit3, Trash2, QrCode, MapPin, SlidersHorizontal, ArrowDownAZ, ArrowUp10, DollarSign
+    Edit3, Trash2, QrCode, MapPin, SlidersHorizontal, ArrowDownAZ, ArrowUp10, DollarSign, Box, Hash, Tag
 } from 'lucide-react';
 import { useToast } from '../context/ToastProvider';
 import { formatCurrency } from '../utils';
@@ -87,142 +87,214 @@ export default function Inventory() {
     const outStockCount = inventory.filter(i => i.quantity === 0).length;
 
     return (
-        <div className="min-h-screen p-4 md:p-8 font-sans pb-24">
+        <div className="min-h-screen p-4 md:p-6 font-sans pb-24 transition-colors duration-300">
 
             {/* NAVBAR */}
-            <div className="navbar rounded-2xl mb-6 sticky top-2 z-40 flex justify-between shadow-sm backdrop-blur-md bg-[var(--bg-surface)] border border-[var(--border-color)]">
+            <div className="navbar rounded-2xl mb-6 sticky top-2 z-40 flex justify-between shadow-sm backdrop-blur-md bg-[var(--bg-surface)] border border-[var(--border-color)] px-3 py-2 animate-fade">
                 <div className="flex items-center">
-                    <button onClick={() => navigate('/dashboard')} className="btn btn-ghost gap-2 text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-main)]">
-                        <ArrowLeft size={20} /> <span className="hidden md:inline font-bold">Dashboard</span>
+                    <button onClick={() => navigate('/dashboard')} className="btn btn-sm btn-ghost gap-2 text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-main)] transition-colors rounded-lg">
+                        <ArrowLeft size={18} /> <span className="hidden md:inline font-bold">Dashboard</span>
                     </button>
                 </div>
                 <div className="flex gap-2">
-                    <button onClick={() => setIsScanning(true)} className="btn btn-sm btn-circle btn-ghost text-[var(--text-main)]"><QrCode size={20} /></button>
-                    <button onClick={() => { setEditingItem(null); setIsModalOpen(true); }} className="btn btn-sm btn-gradient text-white gap-2 shadow-md">
-                        <Plus size={16} /> Add Part
+                    <button onClick={() => setIsScanning(true)} className="btn btn-sm btn-circle btn-ghost text-[var(--text-muted)] hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all"><QrCode size={18} /></button>
+                    <button onClick={() => { setEditingItem(null); setIsModalOpen(true); }} className="btn btn-sm btn-gradient text-white gap-2 shadow-lg shadow-indigo-500/30 hover:scale-105 border-none transition-all px-4 rounded-full">
+                        <Plus size={16} strokeWidth={3} /> <span className="font-bold tracking-wide">Add Part</span>
                     </button>
                 </div>
             </div>
 
             {/* HEADER & STATS */}
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8 animate-fade-in-up">
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8 animate-fade-in-up relative z-30">
 
-                {/* Stats Cards */}
+                {/* Main Control Panel */}
                 <div className="lg:col-span-3 bg-[var(--bg-surface)] rounded-2xl border border-[var(--border-color)] p-6 shadow-sm">
-                    <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-6">
-                        <h1 className="text-2xl font-black text-[var(--text-main)] flex items-center gap-2">
-                            <Package size={24} className="text-indigo-600" /> Inventory
-                        </h1>
-                        <div className="flex gap-2 text-sm font-bold">
-                            <span className="px-3 py-1 bg-[var(--bg-subtle)] rounded-lg text-[var(--text-muted)] border border-[var(--border-color)]">
-                                {inventory.length} SKUs
-                            </span>
-                            <span className="px-3 py-1 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 border border-emerald-100 dark:border-emerald-800">
-                                {formatCurrency(totalValue)} Value
-                            </span>
-                        </div>
-                    </div>
-
-                    {/* Toolbar */}
-                    <div className="flex flex-col md:flex-row gap-3">
-                        <div className="relative flex-1">
-                            <Search className="absolute left-3 top-3.5 text-slate-400" size={18} />
-                            <input type="text" placeholder="Search parts, SKU, or brand..." className="input input-bordered w-full pl-10 bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] font-medium text-[var(--text-main)]"
-                                value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                    <div className="flex flex-col md:flex-row justify-between md:items-end gap-5 mb-6">
+                        <div>
+                            <h1 className="text-2xl font-black text-[var(--text-main)] flex items-center gap-3 tracking-tight mb-2">
+                                <Package size={28} className="text-indigo-600" /> Inventory Database
+                            </h1>
+                            <p className="text-sm text-[var(--text-muted)] font-medium pl-10">Manage stock levels, locations, and pricing.</p>
                         </div>
 
-                        {/* Sort Dropdown */}
-                        <div className="dropdown dropdown-end">
-                            <div tabIndex={0} role="button" className="btn btn-ghost border-[var(--border-color)] text-[var(--text-muted)] gap-2">
-                                <SlidersHorizontal size={16} /> <span className="hidden sm:inline">Sort</span>
+                        {/* Premium Recessed Stats Badges */}
+                        <div className="flex gap-3">
+                            <div className="flex items-center gap-2 bg-[var(--bg-subtle)] px-3 py-1.5 rounded-md shadow-inner border border-[var(--border-color)]">
+                                <Box size={14} className="text-[var(--text-muted)]" />
+                                <span className="font-black text-[10px] text-[var(--text-main)] uppercase tracking-widest">
+                                    {inventory.length} SKUs
+                                </span>
                             </div>
-                            <ul tabIndex={0} className="dropdown-content z-[1] menu p-2 shadow-xl bg-[var(--bg-surface)] rounded-box w-52 border border-[var(--border-color)]">
-                                <li><a onClick={() => setSortBy('name')} className={sortBy === 'name' ? 'active font-bold' : ''}><ArrowDownAZ size={14} /> Name (A-Z)</a></li>
-                                <li><a onClick={() => setSortBy('qty_asc')} className={sortBy === 'qty_asc' ? 'active font-bold' : ''}><ArrowUp10 size={14} /> Low Quantity</a></li>
-                                <li><a onClick={() => setSortBy('qty_desc')} className={sortBy === 'qty_desc' ? 'active font-bold' : ''}><ArrowUp10 size={14} className="rotate-180" /> High Quantity</a></li>
-                                <li><a onClick={() => setSortBy('price_high')} className={sortBy === 'price_high' ? 'active font-bold' : ''}><DollarSign size={14} /> Highest Price</a></li>
-                            </ul>
+                            <div className="flex items-center gap-2 bg-[var(--bg-subtle)] px-3 py-1.5 rounded-md shadow-inner border border-[var(--border-color)]">
+                                <DollarSign size={14} className="text-emerald-500" />
+                                <span className="font-black text-[10px] text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">
+                                    {formatCurrency(totalValue)} Value
+                                </span>
+                            </div>
                         </div>
                     </div>
 
-                    {/* Filter Tabs */}
-                    <div className="flex gap-1 mt-4 border-b border-[var(--border-color)] overflow-x-auto">
-                        <button onClick={() => setFilterTab('all')} className={`pb-2 px-4 text-sm font-bold border-b-2 transition-colors whitespace-nowrap ${filterTab === 'all' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-[var(--text-muted)]'}`}>
-                            All Items
-                        </button>
-                        <button onClick={() => setFilterTab('low')} className={`pb-2 px-4 text-sm font-bold border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${filterTab === 'low' ? 'border-amber-500 text-amber-600' : 'border-transparent text-[var(--text-muted)]'}`}>
-                            Low Stock
-                            {lowStockCount > 0 && <span className="badge badge-xs badge-warning border-none">{lowStockCount}</span>}
-                        </button>
-                        <button onClick={() => setFilterTab('out')} className={`pb-2 px-4 text-sm font-bold border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${filterTab === 'out' ? 'border-red-500 text-red-600' : 'border-transparent text-[var(--text-muted)]'}`}>
-                            Out of Stock
-                            {outStockCount > 0 && <span className="badge badge-xs badge-error border-none text-white">{outStockCount}</span>}
-                        </button>
+                    {/* Toolbar: Search, Sort, Filters */}
+                    <div className="flex flex-col md:flex-row gap-4 items-center border-t border-[var(--border-color)] pt-6 relative z-20">
+
+                        {/* Search */}
+                        <div className="relative flex-1 w-full group">
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)] group-focus-within:text-indigo-500 transition-colors" size={18} />
+                            <input
+                                type="text"
+                                placeholder="Search parts, SKU, or brand..."
+                                className="input input-bordered w-full pl-11 h-12 bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] font-medium shadow-inner transition-all focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                        </div>
+
+                        {/* Right Side Controls */}
+                        <div className="flex gap-3 w-full md:w-auto">
+
+                            {/* Segmented Filter Control */}
+                            <div className="flex bg-[var(--bg-subtle)] p-1 rounded-xl shadow-inner border border-[var(--border-color)] flex-1 md:flex-none">
+                                <button
+                                    onClick={() => setFilterTab('all')}
+                                    className={`flex-1 md:flex-none px-4 py-2 text-xs font-bold rounded-lg transition-all ${filterTab === 'all' ? 'bg-[var(--bg-surface)] text-indigo-600 shadow-sm ring-1 ring-black/5 dark:ring-white/5' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
+                                >
+                                    All
+                                </button>
+                                <button
+                                    onClick={() => setFilterTab('low')}
+                                    className={`flex-1 md:flex-none px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${filterTab === 'low' ? 'bg-[var(--bg-surface)] text-amber-600 shadow-sm ring-1 ring-black/5 dark:ring-white/5' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
+                                >
+                                    Low {lowStockCount > 0 && <span className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 px-1.5 py-0.5 rounded text-[9px]">{lowStockCount}</span>}
+                                </button>
+                                <button
+                                    onClick={() => setFilterTab('out')}
+                                    className={`flex-1 md:flex-none px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${filterTab === 'out' ? 'bg-[var(--bg-surface)] text-red-600 shadow-sm ring-1 ring-black/5 dark:ring-white/5' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
+                                >
+                                    Out {outStockCount > 0 && <span className="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 px-1.5 py-0.5 rounded text-[9px]">{outStockCount}</span>}
+                                </button>
+                            </div>
+
+                            {/* Sort Dropdown */}
+                            <div className="dropdown dropdown-end">
+                                <div tabIndex={0} role="button" className="btn h-12 bg-[var(--bg-subtle)] border-[var(--border-color)] shadow-inner text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface)] transition-all px-4 rounded-xl gap-2">
+                                    <SlidersHorizontal size={16} /> <span className="hidden sm:inline font-bold">Sort</span>
+                                </div>
+                                <ul tabIndex={0} className="dropdown-content z-[100] menu p-2 mt-2 shadow-2xl bg-[var(--bg-surface)] rounded-xl w-52 border border-[var(--border-color)] animate-pop">
+                                    <li><a onClick={() => setSortBy('name')} className={`font-bold ${sortBy === 'name' ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/20' : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-subtle)]'}`}><ArrowDownAZ size={14} /> Name (A-Z)</a></li>
+                                    <li><a onClick={() => setSortBy('qty_asc')} className={`font-bold ${sortBy === 'qty_asc' ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/20' : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-subtle)]'}`}><ArrowUp10 size={14} /> Low Quantity</a></li>
+                                    <li><a onClick={() => setSortBy('qty_desc')} className={`font-bold ${sortBy === 'qty_desc' ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/20' : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-subtle)]'}`}><ArrowUp10 size={14} className="rotate-180" /> High Quantity</a></li>
+                                    <li><a onClick={() => setSortBy('price_high')} className={`font-bold ${sortBy === 'price_high' ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/20' : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-subtle)]'}`}><DollarSign size={14} /> Highest Price</a></li>
+                                </ul>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
                 {/* Quick Add / Tip Box */}
-                <div className="hidden lg:flex bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 text-white shadow-lg items-center justify-between">
+                <div className="hidden lg:flex bg-gradient-to-br from-slate-800 to-slate-900 dark:from-indigo-950 dark:to-slate-900 rounded-2xl p-6 text-white shadow-lg items-center justify-between border border-slate-700 dark:border-indigo-900/50">
                     <div>
-                        <h3 className="font-bold text-lg mb-1">Scan to Find</h3>
-                        <p className="text-slate-300 text-sm opacity-90">Use the camera to instantly locate an item or check its bin location.</p>
-                        <button onClick={() => setIsScanning(true)} className="btn btn-sm btn-outline text-white border-white/30 hover:bg-white/10 mt-4">
-                            <QrCode size={16} /> Open Scanner
+                        <h3 className="font-black text-lg mb-1 tracking-tight">Scan to Find</h3>
+                        <p className="text-slate-300 text-xs font-medium opacity-90 leading-relaxed max-w-[200px]">Use the camera to instantly locate an item or check its bin location.</p>
+                        <button onClick={() => setIsScanning(true)} className="btn btn-sm btn-outline text-white border-white/30 hover:bg-white/10 hover:border-white mt-4 transition-all rounded-full px-4">
+                            <QrCode size={14} /> Open Scanner
                         </button>
                     </div>
-                    <QrCode size={64} className="text-white opacity-10" />
+                    <QrCode size={72} className="text-white opacity-10" />
                 </div>
             </div>
 
-            {/* GRID */}
+            {/* GRID - Replicated TicketCard Style */}
             {loading ? (
-                <div className="p-20 text-center"><span className="loading loading-spinner loading-lg text-primary"></span></div>
+                <div className="flex justify-center mt-20"><span className="loading loading-spinner loading-lg text-indigo-500"></span></div>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 animate-fade">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 animate-fade relative z-10">
                     {filteredItems.map(item => {
                         const isLow = item.quantity < (item.min_quantity || 3) && item.quantity > 0;
                         const isOut = item.quantity === 0;
 
-                        return (
-                            <div key={item.id} className={`bg-[var(--bg-surface)] rounded-xl border p-4 shadow-sm hover:shadow-md transition-all flex flex-col justify-between group relative overflow-hidden
-                                ${isOut ? 'border-red-200 dark:border-red-900 opacity-80' : isLow ? 'border-amber-200 dark:border-amber-900' : 'border-[var(--border-color)]'}
-                            `}>
-                                {/* Stock Health Bar */}
-                                <div className={`absolute top-0 left-0 h-1 w-full ${isOut ? 'bg-red-500' : isLow ? 'bg-amber-500' : 'bg-emerald-500'}`}></div>
+                        // Theme Generator
+                        const getStatusTheme = () => {
+                            if (isOut) return {
+                                cardBorder: 'border-l-red-500 border-red-200 dark:border-red-900/50 opacity-90',
+                                pill: 'bg-red-500 text-white shadow-md shadow-red-500/30',
+                                descBorder: 'border-red-400',
+                                label: 'OUT OF STOCK',
+                                qtyColor: 'text-red-500'
+                            };
+                            if (isLow) return {
+                                cardBorder: 'border-[var(--border-color)] border-l-amber-500',
+                                pill: 'bg-amber-500 text-white shadow-md shadow-amber-500/30',
+                                descBorder: 'border-amber-400',
+                                label: 'LOW STOCK',
+                                qtyColor: 'text-amber-500'
+                            };
+                            return {
+                                cardBorder: 'border-[var(--border-color)] border-l-purple-500',
+                                pill: 'bg-purple-500 text-white shadow-md shadow-purple-500/30',
+                                descBorder: 'border-purple-400',
+                                label: 'IN STOCK',
+                                qtyColor: 'text-[var(--text-main)]'
+                            };
+                        };
 
-                                <div>
-                                    <div className="flex justify-between items-start mb-2">
-                                        <span className="text-[10px] font-black uppercase tracking-wider text-[var(--text-muted)] bg-[var(--bg-subtle)] px-2 py-1 rounded">
-                                            {item.manufacturer || 'Generic'}
-                                        </span>
-                                        {item.bin_location && (
-                                            <span className="text-[10px] font-bold text-indigo-600 flex items-center gap-1 bg-indigo-50 dark:bg-indigo-900/20 px-2 py-1 rounded">
-                                                <MapPin size={10} /> {item.bin_location}
-                                            </span>
-                                        )}
+                        const theme = getStatusTheme();
+
+                        return (
+                            <div key={item.id} className={`bg-[var(--bg-surface)] rounded-xl p-6 shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-0.5 flex flex-col justify-between group border border-l-[4px] ${theme.cardBorder}`}>
+
+                                {/* Header: Status Pill & SKU */}
+                                <div className="flex justify-between items-center mb-5">
+                                    <div className={`inline-flex items-center justify-center px-3 py-1.5 font-black uppercase text-[10px] tracking-widest rounded-md transition-all ${theme.pill}`}>
+                                        {theme.label}
                                     </div>
-                                    <h3 className="font-bold text-[var(--text-main)] text-lg leading-tight mb-1">{item.name}</h3>
-                                    <div className="text-xs text-[var(--text-muted)] font-mono mb-4">SKU: {item.sku || 'N/A'}</div>
+                                    <span className="flex items-center gap-1 text-xs font-mono font-bold text-[var(--text-muted)] opacity-70">
+                                        <Hash size={12} /> {item.sku || 'N/A'}
+                                    </span>
                                 </div>
 
-                                <div className="pt-4 border-t border-[var(--border-color)]">
-                                    <div className="flex justify-between items-center mb-3">
-                                        <div className="text-xl font-black text-[var(--text-main)]">{formatCurrency(item.price)}</div>
+                                {/* Title Area */}
+                                <div className="mb-4">
+                                    <h3 className="text-lg font-black text-[var(--text-main)] mb-1 leading-tight group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">
+                                        {item.name}
+                                    </h3>
+                                    <div className="flex items-center gap-1.5 text-xs font-mono text-[var(--text-muted)] opacity-80 uppercase tracking-widest">
+                                        <Tag size={12} /> {item.manufacturer || 'GENERIC'}
+                                    </div>
+                                </div>
 
-                                        {/* Stock Controls */}
-                                        <div className="flex items-center gap-1 bg-[var(--bg-subtle)] rounded-lg p-1 border border-[var(--border-color)]">
-                                            <button onClick={() => adjustStock(item.id, item.quantity, -1)} className="btn btn-xs btn-square btn-ghost hover:bg-red-100 hover:text-red-600">-</button>
-                                            <span className={`font-black w-8 text-center ${isOut ? 'text-red-500' : isLow ? 'text-amber-500' : 'text-[var(--text-main)]'}`}>{item.quantity}</span>
-                                            <button onClick={() => adjustStock(item.id, item.quantity, 1)} className="btn btn-xs btn-square btn-ghost hover:bg-emerald-100 hover:text-emerald-600">+</button>
-                                        </div>
+                                {/* Recessed Detail Box (Matches Ticket Description Box) */}
+                                <div className={`p-3.5 mb-6 rounded-lg border-l-[3px] bg-[var(--bg-subtle)] shadow-inner flex justify-between items-center ${theme.descBorder}`}>
+                                    <div className="flex flex-col">
+                                        <span className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] opacity-70 mb-0.5">Bin Location</span>
+                                        <span className="flex items-center gap-1.5 text-xs font-bold text-[var(--text-main)]">
+                                            <MapPin size={12} className="text-indigo-500" /> {item.bin_location || 'N/A'}
+                                        </span>
+                                    </div>
+                                    <div className="flex flex-col items-end">
+                                        <span className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] opacity-70 mb-0.5">Retail Price</span>
+                                        <span className="text-lg font-black text-[var(--text-main)] leading-none">
+                                            {formatCurrency(item.price)}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {/* Footer - Dashed Divider */}
+                                <div className="border-t-2 border-dashed border-[var(--border-color)] pt-4 flex justify-between items-center mt-auto">
+
+                                    {/* Stepper Controls */}
+                                    <div className="flex items-center gap-1 bg-[var(--bg-subtle)] rounded-lg p-1 border border-[var(--border-color)] shadow-inner">
+                                        <button onClick={() => adjustStock(item.id, item.quantity, -1)} className="btn btn-xs btn-square btn-ghost text-[var(--text-muted)] hover:bg-[var(--bg-surface)] hover:text-red-500 hover:shadow-sm border border-transparent hover:border-red-200 dark:hover:border-red-900/30 transition-all">-</button>
+                                        <span className={`font-black w-8 text-center text-sm ${theme.qtyColor}`}>{item.quantity}</span>
+                                        <button onClick={() => adjustStock(item.id, item.quantity, 1)} className="btn btn-xs btn-square btn-ghost text-[var(--text-muted)] hover:bg-[var(--bg-surface)] hover:text-emerald-500 hover:shadow-sm border border-transparent hover:border-emerald-200 dark:hover:border-emerald-900/30 transition-all">+</button>
                                     </div>
 
-                                    <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button onClick={() => { setEditingItem(item); setIsModalOpen(true); }} className="btn btn-xs btn-ghost flex-1 border border-[var(--border-color)] text-[var(--text-muted)]">
-                                            Edit
+                                    {/* Actions */}
+                                    <div className="flex gap-2">
+                                        <button onClick={() => { setEditingItem(item); setIsModalOpen(true); }} className="btn btn-xs btn-ghost text-[var(--text-muted)] hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20 border border-transparent hover:border-purple-200 dark:hover:border-purple-900/30 transition-all font-bold">
+                                            <Edit3 size={14} className="mr-1" /> Edit
                                         </button>
-                                        <button onClick={() => handleDelete(item.id)} className="btn btn-xs btn-ghost btn-square text-red-400 hover:bg-red-50">
-                                            <Trash2 size={12} />
+                                        <button onClick={() => handleDelete(item.id)} className="btn btn-xs btn-ghost btn-square text-[var(--text-muted)] hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 border border-transparent hover:border-red-200 dark:hover:border-red-900/30 transition-all" title="Delete Part">
+                                            <Trash2 size={14} />
                                         </button>
                                     </div>
                                 </div>
@@ -230,9 +302,10 @@ export default function Inventory() {
                         );
                     })}
                     {filteredItems.length === 0 && (
-                        <div className="col-span-full text-center p-12 opacity-50">
-                            <Package size={48} className="mx-auto mb-4 text-slate-300" />
-                            <p className="font-bold text-lg text-[var(--text-muted)]">No parts found</p>
+                        <div className="col-span-full text-center p-16 bg-[var(--bg-surface)] rounded-2xl border-2 border-dashed border-[var(--border-color)] shadow-sm">
+                            <Package size={48} className="mx-auto mb-4 text-[var(--border-color)]" />
+                            <p className="font-bold text-lg text-[var(--text-main)]">No parts found</p>
+                            <p className="text-sm text-[var(--text-muted)] mt-1">Adjust your filters or add a new part.</p>
                         </div>
                     )}
                 </div>

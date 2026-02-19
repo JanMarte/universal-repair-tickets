@@ -45,7 +45,7 @@ export default function TicketDetail() {
     const [isSending, setIsSending] = useState(false);
     const [selectedLog, setSelectedLog] = useState(null);
     const [logToDelete, setLogToDelete] = useState(null);
-    const [photoToDelete, setPhotoToDelete] = useState(null); // <--- NEW STATE
+    const [photoToDelete, setPhotoToDelete] = useState(null);
 
     // Mobile & Theme
     const [isMobileChatOpen, setIsMobileChatOpen] = useState(false);
@@ -150,7 +150,7 @@ export default function TicketDetail() {
         }
     };
 
-    // --- NEW: DELETE PHOTO LOGIC ---
+    // --- DELETE PHOTO LOGIC ---
     const promptDeletePhoto = (imageName, e) => {
         e.stopPropagation();
         setPhotoToDelete(imageName);
@@ -164,7 +164,6 @@ export default function TicketDetail() {
             if (error) throw error;
 
             addToast("Photo deleted", "success");
-            // Optimistic Update
             setImages(prev => prev.filter(img => img.name !== photoToDelete));
             setPhotoToDelete(null);
         } catch (error) {
@@ -174,7 +173,7 @@ export default function TicketDetail() {
         }
     };
 
-    // --- UI STATE FOR PHOTOS & LIGHTBOX (WITH PAN) ---
+    // --- LIGHTBOX LOGIC ---
     const [isPhotosCollapsed, setIsPhotosCollapsed] = useState(true);
     const [lightboxImage, setLightboxImage] = useState(null);
     const [zoomLevel, setZoomLevel] = useState(1);
@@ -199,7 +198,7 @@ export default function TicketDetail() {
             let newZoom = prev;
             if (direction === 'in') newZoom = Math.min(prev + 0.5, 3);
             if (direction === 'out') newZoom = Math.max(prev - 0.5, 1);
-            if (newZoom === 1) setPan({ x: 0, y: 0 }); // Reset pan on zoom out
+            if (newZoom === 1) setPan({ x: 0, y: 0 });
             return newZoom;
         });
     };
@@ -219,9 +218,7 @@ export default function TicketDetail() {
         }
     };
 
-    const handleMouseUp = () => {
-        setIsDragging(false);
-    };
+    const handleMouseUp = () => setIsDragging(false);
 
     async function fetchData() {
         const { data: { user } } = await supabase.auth.getUser();
@@ -256,14 +253,6 @@ export default function TicketDetail() {
         setLoading(false);
         setTimeout(() => { isLoadedRef.current = true; }, 1000);
     }
-
-    const getHumanReadableDevice = (userAgent) => {
-        if (!userAgent) return 'Unknown Device';
-        if (userAgent.includes('iPhone')) return 'iPhone';
-        if (userAgent.includes('iPad')) return 'iPad';
-        if (userAgent.includes('Android')) return 'Android Device';
-        return 'Web Browser';
-    };
 
     const logAudit = async (action, details, extraMetadata = {}) => {
         const actorName = currentUser?.full_name || currentUser?.email || 'System';
@@ -397,7 +386,7 @@ export default function TicketDetail() {
         }
 
         const { error } = await supabase.from('ticket_messages').insert([{
-            ticket_id: id, message_text: newMessage, is_internal: isInternalNote, sender_name: senderName
+            ticket_id: id, message_text: newMessage, is_internal: isInternalNote, senderName: senderName
         }]);
 
         if (!error) {
@@ -452,12 +441,12 @@ export default function TicketDetail() {
 
     const getStatusColor = (status) => {
         switch (status) {
-            case 'intake': return 'bg-gradient-to-r from-blue-600 to-blue-500 text-white border-blue-700 dark:from-transparent dark:to-transparent dark:bg-blue-900/40 dark:text-blue-200 dark:border-blue-800';
-            case 'diagnosing': return 'bg-gradient-to-r from-purple-600 to-purple-500 text-white border-purple-700 dark:from-transparent dark:to-transparent dark:bg-purple-900/40 dark:text-purple-200 dark:border-purple-800';
-            case 'waiting_parts': return 'bg-gradient-to-r from-orange-600 to-orange-500 text-white border-orange-700 dark:from-transparent dark:to-transparent dark:bg-orange-900/40 dark:text-orange-200 dark:border-orange-800';
-            case 'repairing': return 'bg-gradient-to-r from-amber-600 to-amber-500 text-white border-amber-700 dark:from-transparent dark:to-transparent dark:bg-amber-900/40 dark:text-amber-200 dark:border-amber-800';
-            case 'ready_pickup': return 'bg-gradient-to-r from-emerald-600 to-emerald-500 text-white border-emerald-700 dark:from-transparent dark:to-transparent dark:bg-emerald-900/40 dark:text-emerald-200 dark:border-emerald-800';
-            case 'completed': return 'bg-gradient-to-r from-slate-600 to-slate-500 text-white border-slate-700 dark:from-transparent dark:to-transparent dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700';
+            case 'intake': return 'bg-blue-500 text-white shadow-md shadow-blue-500/20';
+            case 'diagnosing': return 'bg-purple-500 text-white shadow-md shadow-purple-500/20';
+            case 'waiting_parts': return 'bg-orange-500 text-white shadow-md shadow-orange-500/20';
+            case 'repairing': return 'bg-amber-500 text-white shadow-md shadow-amber-500/20';
+            case 'ready_pickup': return 'bg-emerald-500 text-white shadow-md shadow-emerald-500/20';
+            case 'completed': return 'bg-slate-500 text-white shadow-md shadow-slate-500/20';
             default: return 'bg-gray-500 text-white';
         }
     };
@@ -468,7 +457,7 @@ export default function TicketDetail() {
         if (action.includes('ASSIGN')) return { bg: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300', icon: <User size={14} /> };
         if (action.includes('PART')) return { bg: 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300', icon: <Truck size={14} /> };
         if (action.includes('DELETE') || action.includes('REMOVE')) return { bg: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300', icon: <AlertCircle size={14} /> };
-        return { bg: 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400', icon: <FileText size={14} /> };
+        return { bg: 'bg-[var(--bg-subtle)] text-[var(--text-muted)] border border-[var(--border-color)]', icon: <FileText size={14} /> };
     };
 
     const QUICK_REPLIES = [
@@ -481,23 +470,20 @@ export default function TicketDetail() {
     const renderChatInterface = () => (
         <div className="flex flex-col h-full bg-[var(--bg-surface)] relative">
             {isStaff ? (
-                <div className="p-3 border-b border-[var(--border-color)] bg-[var(--bg-subtle)]">
-                    <div className="bg-[var(--border-color)]/20 p-1 rounded-xl flex relative">
+                <div className="p-4 border-b border-[var(--border-color)] bg-[var(--bg-surface)] shrink-0">
+                    <div className="flex bg-[var(--bg-subtle)] p-1 rounded-xl shadow-inner border border-[var(--border-color)]">
                         <button
                             onClick={() => setActiveTab('internal')}
-                            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-black uppercase tracking-wide transition-all ${activeTab === 'internal' ? 'bg-amber-100 text-amber-800 shadow-sm dark:bg-amber-900/40 dark:text-amber-100' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
+                            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'internal' ? 'bg-[var(--bg-surface)] text-amber-600 shadow-sm ring-1 ring-black/5 dark:ring-white/5' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
                         >
                             <Lock size={12} /> Internal Notes
                         </button>
                         <button
                             onClick={() => setActiveTab('public')}
-                            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-black uppercase tracking-wide transition-all ${activeTab === 'public' ? 'bg-white text-indigo-600 shadow-sm dark:bg-slate-700 dark:text-indigo-300' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
+                            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'public' ? 'bg-[var(--bg-surface)] text-indigo-600 shadow-sm ring-1 ring-black/5 dark:ring-white/5' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
                         >
                             <Globe size={12} /> Customer Chat
                         </button>
-                    </div>
-                    <div className={`mt-2 text-[10px] font-bold text-center transition-colors ${activeTab === 'internal' ? 'text-amber-600/70' : 'text-indigo-500/70'}`}>
-                        {activeTab === 'internal' ? 'Visible only to staff' : 'Visible to customer on status page'}
                     </div>
                 </div>
             ) : (
@@ -524,7 +510,7 @@ export default function TicketDetail() {
 
                     return (
                         <div key={msg.id} className={`flex gap-3 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
-                            <div className={`flex-none w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black shadow-sm ring-2 ring-white dark:ring-slate-800 ${isInternal ? 'bg-amber-200 text-amber-800' : (isMe ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300')}`}>
+                            <div className={`flex-none w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black shadow-sm ring-2 ring-white dark:ring-[var(--bg-surface)] ${isInternal ? 'bg-amber-200 text-amber-800' : (isMe ? 'bg-indigo-600 text-white' : 'bg-[var(--bg-surface)] text-[var(--text-main)] border border-[var(--border-color)]')}`}>
                                 {initials}
                             </div>
                             <div className={`flex flex-col max-w-[80%] ${isMe ? 'items-end' : 'items-start'}`}>
@@ -536,7 +522,7 @@ export default function TicketDetail() {
                                     ? 'bg-amber-100 text-amber-900 border border-amber-200 rounded-tl-none'
                                     : (isMe
                                         ? 'bg-gradient-to-br from-indigo-600 to-indigo-700 text-white rounded-tr-none'
-                                        : 'bg-white dark:bg-slate-700 text-[var(--text-main)] border border-[var(--border-color)] rounded-tl-none')
+                                        : 'bg-[var(--bg-surface)] text-[var(--text-main)] border border-[var(--border-color)] rounded-tl-none')
                                     }`}>
                                     {isInternal && <Lock size={10} className="inline-block mr-1.5 opacity-50 mb-0.5" />}
                                     {msg.message_text}
@@ -549,11 +535,11 @@ export default function TicketDetail() {
             </div>
 
             {isClosed ? (
-                <div className="p-6 bg-slate-50 dark:bg-slate-800/50 border-t border-[var(--border-color)] flex flex-col items-center justify-center text-center">
-                    <div className="bg-slate-200 dark:bg-slate-700 p-3 rounded-full mb-2">
-                        <LockKeyhole size={24} className="text-slate-500 dark:text-slate-400" />
+                <div className="p-6 bg-[var(--bg-subtle)] border-t border-[var(--border-color)] flex flex-col items-center justify-center text-center shrink-0 shadow-inner">
+                    <div className="bg-[var(--bg-surface)] p-3 rounded-full mb-2 border border-[var(--border-color)] shadow-sm">
+                        <LockKeyhole size={24} className="text-[var(--text-muted)]" />
                     </div>
-                    <h3 className="font-black text-[var(--text-main)] text-sm">Ticket Archived</h3>
+                    <h3 className="font-black text-[10px] uppercase tracking-widest text-[var(--text-muted)]">Ticket Archived</h3>
                 </div>
             ) : (
                 <form onSubmit={sendMessage} className="p-3 bg-[var(--bg-surface)] border-t border-[var(--border-color)] flex-none pb-safe">
@@ -564,14 +550,14 @@ export default function TicketDetail() {
                                     key={index}
                                     type="button"
                                     onClick={() => setNewMessage(reply.text)}
-                                    className="flex-none btn btn-xs btn-ghost bg-[var(--bg-subtle)] border border-[var(--border-color)] text-[var(--text-muted)] hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-all font-bold whitespace-nowrap"
+                                    className="flex-none btn btn-xs btn-ghost bg-[var(--bg-subtle)] border border-[var(--border-color)] text-[var(--text-muted)] hover:bg-indigo-50 dark:hover:bg-indigo-900/20 hover:text-indigo-600 dark:hover:text-indigo-400 hover:border-indigo-200 transition-all font-bold whitespace-nowrap shadow-sm"
                                 >
                                     {reply.label}
                                 </button>
                             ))}
                         </div>
                     )}
-                    <div className="relative flex items-end gap-2 bg-[var(--bg-subtle)] p-1.5 rounded-xl border border-[var(--border-color)] focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500/20 transition-all">
+                    <div className="relative flex items-end gap-2 bg-[var(--bg-subtle)] p-1.5 rounded-xl border border-[var(--border-color)] focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500/20 transition-all shadow-inner">
                         <textarea
                             ref={inputRef}
                             rows={1}
@@ -598,92 +584,112 @@ export default function TicketDetail() {
         </div>
     );
 
-    if (loading) return <div className="p-10 text-center"><span className="loading loading-spinner loading-lg text-primary"></span></div>;
-    if (!ticket) return <div className="p-10 text-center text-xl font-bold text-[var(--text-main)]">Ticket not found.</div>;
+    if (loading) return <div className="flex justify-center mt-20"><span className="loading loading-spinner loading-lg text-indigo-500"></span></div>;
+    if (!ticket) return <div className="p-10 text-center font-bold text-[var(--text-muted)]">Ticket not found.</div>;
 
     return (
-        <div className="min-h-screen p-4 md:p-8 font-sans pb-32 lg:pb-24">
+        <div className="min-h-screen p-4 md:p-6 font-sans pb-32 lg:pb-24 transition-colors duration-300">
             {/* NAVBAR */}
-            <div className="navbar rounded-2xl mb-6 sticky top-2 z-40 flex justify-between shadow-sm backdrop-blur-xl bg-[var(--bg-surface)]/90 border border-[var(--border-color)] transition-all duration-300">
+            <div className="navbar rounded-2xl mb-6 sticky top-2 z-40 flex justify-between shadow-sm backdrop-blur-md bg-[var(--bg-surface)] border border-[var(--border-color)] px-3 py-2 animate-fade">
                 <div className="flex items-center">
-                    <button onClick={() => navigate(-1)} className="btn btn-ghost gap-3 px-2 text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-main)] group">
-                        <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform duration-300" />
-                        <div className="hidden md:flex flex-col items-start leading-none">
-                            <span className="text-[10px] font-bold uppercase tracking-wider opacity-60">Return to</span>
-                            <span className="text-sm font-black">Dashboard</span>
-                        </div>
+                    <button onClick={() => navigate(-1)} className="btn btn-sm btn-ghost gap-2 px-3 text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-main)] transition-all rounded-lg group">
+                        <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform duration-300" />
+                        <span className="hidden md:inline font-bold">Dashboard</span>
                     </button>
                 </div>
                 <div className="flex-none flex items-center gap-1 sm:gap-2">
-                    <button onClick={() => { navigator.clipboard.writeText(ticket.id); addToast('ID copied', 'success'); }} className="hidden sm:flex items-center gap-2 bg-[var(--bg-subtle)] hover:bg-indigo-50 dark:hover:bg-indigo-900/20 hover:border-indigo-200 px-3 py-1.5 rounded-lg border border-[var(--border-color)] transition-all group cursor-pointer mr-2" title="Click to copy ID"><Hash size={12} className="text-[var(--text-muted)] group-hover:text-indigo-500 transition-colors" /><span className="font-mono text-xs font-bold text-[var(--text-muted)] group-hover:text-indigo-600 dark:group-hover:text-indigo-300 transition-colors">#{ticket.id}</span></button>
-                    <button className="btn btn-sm btn-square btn-ghost text-[var(--text-muted)] hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-all" onClick={() => setIsScanning(true)} title="Scan QR Code"><QrCode size={18} /></button>
-                    <button className="btn btn-sm btn-square btn-ghost text-[var(--text-muted)] hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-lg transition-all" onClick={toggleTheme} title="Toggle Light/Dark Mode">{theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}</button>
+                    <button onClick={() => { navigator.clipboard.writeText(ticket.id); addToast('ID copied', 'success'); }} className="hidden sm:flex items-center gap-2 bg-[var(--bg-subtle)] hover:bg-[var(--bg-surface)] px-3 py-1.5 rounded-lg border border-[var(--border-color)] shadow-inner transition-all group cursor-pointer mr-2" title="Click to copy ID">
+                        <Hash size={12} className="text-[var(--text-muted)] group-hover:text-indigo-500 transition-colors" />
+                        <span className="font-mono text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">ID: {ticket.id}</span>
+                    </button>
+                    <button className="btn btn-sm btn-circle btn-ghost text-[var(--text-muted)] hover:text-indigo-500 hover:bg-[var(--bg-subtle)] transition-colors" onClick={() => setIsScanning(true)} title="Scan QR Code"><QrCode size={18} /></button>
+                    <button className="btn btn-sm btn-circle btn-ghost text-[var(--text-muted)] hover:text-amber-500 hover:bg-[var(--bg-subtle)] transition-colors" onClick={toggleTheme} title="Toggle Light/Dark Mode">{theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}</button>
                 </div>
             </div>
 
             {/* HEADER CARD */}
-            <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-2xl p-5 md:p-8 shadow-sm mb-6 relative overflow-hidden animate-fade-in-up">
+            <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-2xl p-6 md:p-8 shadow-sm mb-6 relative overflow-hidden animate-fade-in-up">
                 <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 opacity-80"></div>
                 <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
                     <div className="flex-1 min-w-0 w-full">
                         <div className="flex items-center gap-2 mb-3 flex-wrap">
-                            {ticket.serial_number && <span className="flex items-center gap-2 bg-[var(--bg-subtle)] border border-[var(--border-color)] text-[var(--text-main)] px-3 py-1.5 rounded-md font-mono text-xs md:text-sm font-black tracking-wide shadow-sm"><Hash size={14} className="opacity-50" />{ticket.serial_number}</span>}
-                            <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] flex items-center gap-1 bg-[var(--bg-subtle)] px-2 py-1.5 rounded-md"><Calendar size={12} /> {format(new Date(ticket.created_at), 'MMM dd')}</span>
+                            {ticket.serial_number && (
+                                <span className="flex items-center gap-1.5 bg-[var(--bg-subtle)] border border-[var(--border-color)] shadow-inner text-[var(--text-main)] px-3 py-1.5 rounded-md font-mono text-[10px] uppercase font-black tracking-widest">
+                                    <Hash size={12} className="opacity-50" />{ticket.serial_number}
+                                </span>
+                            )}
+                            <span className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] flex items-center gap-1 bg-[var(--bg-subtle)] border border-[var(--border-color)] shadow-inner px-3 py-1.5 rounded-md">
+                                <Calendar size={12} /> {format(new Date(ticket.created_at), 'MMM dd')}
+                            </span>
 
-                            {/* NEW: PROMINENT ESTIMATE BADGE */}
                             {ticket.estimate_status === 'approved' && (
-                                <span className="badge badge-success border-none text-white font-black uppercase tracking-widest text-[10px] px-3 py-2.5 shadow-sm gap-1 ml-2">
-                                    <CheckCircle size={12} /> Estimate Approved
+                                <span className="badge border-none bg-emerald-500 text-white shadow-md shadow-emerald-500/30 font-black uppercase tracking-widest text-[9px] px-3 py-2.5 gap-1 ml-1">
+                                    <CheckCircle size={12} strokeWidth={3} /> Approved
                                 </span>
                             )}
                             {ticket.estimate_status === 'declined' && (
-                                <span className="badge badge-error border-none text-white font-black uppercase tracking-widest text-[10px] px-3 py-2.5 shadow-sm gap-1 ml-2">
-                                    <XCircle size={12} /> Estimate Declined
+                                <span className="badge border-none bg-red-500 text-white shadow-md shadow-red-500/30 font-black uppercase tracking-widest text-[9px] px-3 py-2.5 gap-1 ml-1">
+                                    <XCircle size={12} strokeWidth={3} /> Declined
                                 </span>
                             )}
                             {ticket.estimate_status === 'sent' && (
-                                <span className="badge badge-warning border-none text-white font-black uppercase tracking-widest text-[10px] px-3 py-2.5 shadow-sm gap-1 ml-2">
-                                    <Clock size={12} /> Pending Approval
+                                <span className="badge border-none bg-amber-500 text-white shadow-md shadow-amber-500/30 font-black uppercase tracking-widest text-[9px] px-3 py-2.5 gap-1 ml-1">
+                                    <Clock size={12} strokeWidth={3} /> Pending
                                 </span>
                             )}
                         </div>
-                        <h1 className="text-2xl md:text-4xl font-black text-[var(--text-main)] tracking-tight mb-2 leading-tight">{ticket.brand} <span className="text-indigo-500">{ticket.model}</span></h1>
-                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm font-medium text-[var(--text-muted)] mt-2">
+                        <h1 className="text-3xl md:text-4xl font-black text-[var(--text-main)] tracking-tight mb-3 leading-tight">{ticket.brand} <span className="text-indigo-500">{ticket.model}</span></h1>
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm font-medium text-[var(--text-muted)]">
                             <div className="flex items-center gap-2"><User size={16} /> {ticket.customer_name}</div>
                             <div className="flex items-center gap-2"><Phone size={16} /> {formatPhoneNumber(ticket.phone)}</div>
-                            {isStaff && ticket.customer_id && <button onClick={() => navigate(`/customer/${ticket.customer_id}`)} className="flex items-center gap-1 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 px-2 py-0.5 rounded-md transition-all cursor-pointer"><History size={14} /> <span className="text-xs font-bold uppercase tracking-wide">History</span></button>}
+                            {isStaff && ticket.customer_id && (
+                                <button onClick={() => navigate(`/customer/${ticket.customer_id}`)} className="flex items-center gap-1 text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 bg-indigo-50 dark:bg-indigo-900/20 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 px-2 py-1 rounded-md transition-all cursor-pointer shadow-sm border border-indigo-100 dark:border-indigo-800">
+                                    <History size={14} /> <span className="text-[10px] font-black uppercase tracking-widest mt-0.5">History</span>
+                                </button>
+                            )}
                         </div>
                     </div>
+
                     <div className="flex flex-col items-stretch w-full lg:w-auto gap-3 flex-none">
                         {isStaff ? (
-                            <div className="flex flex-col gap-2">
+                            <div className="flex flex-col gap-3">
                                 <div className="flex gap-2 w-full lg:w-auto">
-                                    <select className={`select select-bordered flex-1 lg:flex-none w-full lg:w-52 h-12 text-sm font-black uppercase tracking-wide border-2 focus:outline-none ${getStatusColor(ticket.status)}`} value={ticket.status} onChange={(e) => updateStatus(e.target.value)} disabled={!canEdit}>
-                                        <option value="intake" className="text-black bg-white">In Queue</option>
-                                        <option value="diagnosing" className="text-black bg-white">Diagnosing</option>
-                                        <option value="waiting_parts" className="text-black bg-white">Waiting on Parts</option>
-                                        <option value="repairing" className="text-black bg-white">Repairing</option>
-                                        <option value="ready_pickup" className="text-black bg-white">Ready for Pickup</option>
-                                        <option value="completed" className="text-black bg-white">Completed</option>
+                                    <select
+                                        className={`select select-bordered flex-1 lg:flex-none w-full lg:w-56 h-12 text-sm font-black uppercase tracking-wide border-0 shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-500/50 ${getStatusColor(ticket.status)}`}
+                                        value={ticket.status}
+                                        onChange={(e) => updateStatus(e.target.value)}
+                                        disabled={!canEdit}
+                                    >
+                                        <option value="intake" className="bg-[var(--bg-surface)] text-[var(--text-main)] shadow-none">In Queue</option>
+                                        <option value="diagnosing" className="bg-[var(--bg-surface)] text-[var(--text-main)] shadow-none">Diagnosing</option>
+                                        <option value="waiting_parts" className="bg-[var(--bg-surface)] text-[var(--text-main)] shadow-none">Waiting on Parts</option>
+                                        <option value="repairing" className="bg-[var(--bg-surface)] text-[var(--text-main)] shadow-none">Repairing</option>
+                                        <option value="ready_pickup" className="bg-[var(--bg-surface)] text-[var(--text-main)] shadow-none">Ready for Pickup</option>
+                                        <option value="completed" className="bg-[var(--bg-surface)] text-[var(--text-main)] shadow-none">Completed</option>
                                     </select>
-                                    <button onClick={handleCopyLink} className="btn btn-square h-12 w-12 border-2 border-[var(--border-color)] bg-[var(--bg-surface)] hover:bg-[var(--bg-subtle)] text-indigo-500 flex-none" title="Copy Public Link"><Share2 size={20} /></button>
+                                    <button onClick={handleCopyLink} className="btn btn-square h-12 w-12 border border-[var(--border-color)] bg-[var(--bg-surface)] shadow-sm hover:bg-[var(--bg-subtle)] text-indigo-500 flex-none transition-all" title="Copy Public Link"><Share2 size={20} /></button>
                                     <div className="dropdown dropdown-end">
-                                        <label tabIndex={0} className="btn btn-square h-12 w-12 border-2 border-[var(--border-color)] bg-[var(--bg-surface)] hover:bg-[var(--bg-subtle)] text-[var(--text-main)] flex-none"><Printer size={20} /></label>
-                                        <ul tabIndex={0} className="dropdown-content z-[1] menu p-2 shadow-xl bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-box w-52 mt-1">
-                                            <li><a onClick={handlePrintShop} className="flex items-center gap-2 font-bold text-[var(--text-main)]"><Tag size={16} /> Shop Tag (Device)</a></li>
-                                            <li><a onClick={handlePrintCustomer} className="flex items-center gap-2 font-bold text-[var(--text-main)]"><User size={16} /> Customer Receipt</a></li>
+                                        <label tabIndex={0} className="btn btn-square h-12 w-12 border border-[var(--border-color)] bg-[var(--bg-surface)] shadow-sm hover:bg-[var(--bg-subtle)] text-[var(--text-main)] flex-none transition-all"><Printer size={20} /></label>
+                                        <ul tabIndex={0} className="dropdown-content z-[50] menu p-2 shadow-2xl bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl w-52 mt-2 animate-pop">
+                                            <li><a onClick={handlePrintShop} className="flex items-center gap-2 font-bold text-[var(--text-main)] hover:bg-[var(--bg-subtle)] rounded-lg"><Tag size={16} className="text-indigo-500" /> Shop Tag (Device)</a></li>
+                                            <li><a onClick={handlePrintCustomer} className="flex items-center gap-2 font-bold text-[var(--text-main)] hover:bg-[var(--bg-subtle)] rounded-lg"><User size={16} className="text-emerald-500" /> Customer Receipt</a></li>
                                         </ul>
                                     </div>
                                 </div>
-                                <div className="form-control w-full lg:w-52">
-                                    <select className="select select-bordered w-full h-12 text-base font-bold bg-[var(--bg-subtle)] text-[var(--text-main)] border-2 focus:border-indigo-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" value={ticket.assigned_to || ""} onChange={(e) => handleAssignment(e.target.value)} disabled={!canEdit}>
-                                        <option value="">-- Unassigned --</option>
-                                        {employees.map(emp => <option key={emp.id} value={emp.id} className="font-bold text-indigo-900 dark:text-indigo-200">{emp.full_name || emp.email}</option>)}
+                                <div className="form-control w-full lg:w-56">
+                                    <select
+                                        className="select select-bordered w-full h-12 text-[10px] font-black uppercase tracking-widest bg-[var(--bg-subtle)] text-[var(--text-main)] border border-[var(--border-color)] shadow-inner focus:border-indigo-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                                        value={ticket.assigned_to || ""}
+                                        onChange={(e) => handleAssignment(e.target.value)}
+                                        disabled={!canEdit}
+                                    >
+                                        <option value="" className="bg-[var(--bg-surface)] text-[var(--text-muted)]">-- Unassigned --</option>
+                                        {employees.map(emp => <option key={emp.id} value={emp.id} className="bg-[var(--bg-surface)] text-[var(--text-main)] font-bold">{emp.full_name || emp.email}</option>)}
                                     </select>
                                 </div>
                             </div>
                         ) : (
-                            <div className={`badge h-10 w-full lg:w-auto px-4 font-bold uppercase tracking-wide ${getStatusColor(ticket.status)}`}>{ticket.status.replace('_', ' ')}</div>
+                            <div className={`badge h-10 w-full lg:w-auto px-5 font-black uppercase tracking-widest shadow-md ${getStatusColor(ticket.status)}`}>{ticket.status.replace('_', ' ')}</div>
                         )}
                     </div>
                 </div>
@@ -693,61 +699,93 @@ export default function TicketDetail() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade">
                 <div className="col-span-1 lg:col-span-2 space-y-6">
                     <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-2xl shadow-sm overflow-hidden animate-fade-in relative group">
-                        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500 opacity-50"></div>
-                        <div className="px-6 py-5 border-b border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-subtle)]">
-                            <div><h2 className="text-sm font-black uppercase text-[var(--text-main)] tracking-widest flex items-center gap-2"><ClipboardList size={18} className="text-indigo-600" /> Technical Diagnosis</h2><p className="text-[10px] font-bold text-[var(--text-muted)] mt-0.5 ml-7">Case File #{ticket.id} • Opened {format(new Date(ticket.created_at), 'MMM dd, yyyy')}</p></div>
-                            {canEdit && (userRole === 'manager' || userRole === 'admin') && <button onClick={() => setIsEditModalOpen(true)} className="btn btn-sm bg-white dark:bg-slate-800 border border-[var(--border-color)] shadow-sm text-[var(--text-muted)] hover:text-indigo-600 hover:border-indigo-300 transition-all gap-2"><Edit3 size={14} /> <span className="hidden sm:inline font-bold">Edit Specs</span></button>}
+
+                        {/* Panel Header */}
+                        <div className="px-6 py-4 border-b-2 border-dashed border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-surface)]">
+                            <div>
+                                <h2 className="text-[10px] font-black uppercase text-[var(--text-main)] tracking-widest flex items-center gap-2">
+                                    <ClipboardList size={16} className="text-indigo-600" /> Technical Diagnosis
+                                </h2>
+                            </div>
+                            {canEdit && (userRole === 'manager' || userRole === 'admin') && (
+                                <button onClick={() => setIsEditModalOpen(true)} className="btn btn-sm btn-ghost border border-transparent shadow-none text-[var(--text-muted)] hover:text-indigo-600 hover:bg-[var(--bg-subtle)] transition-all gap-2">
+                                    <Edit3 size={14} /> <span className="hidden sm:inline font-bold">Edit Specs</span>
+                                </button>
+                            )}
                         </div>
 
-                        <div className="p-6 md:p-8">
+                        <div className="p-6 md:p-8 bg-[var(--bg-subtle)]">
+
+                            {/* Technical Specs - Recessed Cards */}
                             <div className="flex flex-wrap gap-4 mb-8">
-                                <div className="flex items-center gap-3 px-4 py-2 bg-[var(--bg-subtle)] rounded-lg border border-[var(--border-color)]">
-                                    <div className="p-1.5 bg-white dark:bg-slate-700 rounded-md shadow-sm"><Cpu size={16} className="text-slate-500" /></div>
-                                    <div><div className="text-[9px] font-black uppercase text-[var(--text-muted)] tracking-wider">Model ID</div><div className="text-sm font-bold text-[var(--text-main)]">{ticket.model}</div></div>
+                                <div className="flex items-center gap-3 px-4 py-2 bg-[var(--bg-surface)] rounded-xl border border-[var(--border-color)] shadow-sm">
+                                    <div className="p-2 bg-[var(--bg-subtle)] rounded-lg shadow-inner border border-[var(--border-color)]"><Cpu size={16} className="text-indigo-500" /></div>
+                                    <div>
+                                        <div className="text-[9px] font-black uppercase text-[var(--text-muted)] tracking-widest mb-0.5">Model ID</div>
+                                        <div className="text-sm font-bold text-[var(--text-main)] leading-none">{ticket.model}</div>
+                                    </div>
                                 </div>
-                                <div className="flex items-center gap-3 px-4 py-2 bg-[var(--bg-subtle)] rounded-lg border border-[var(--border-color)]">
-                                    <div className="p-1.5 bg-white dark:bg-slate-700 rounded-md shadow-sm"><Fingerprint size={16} className="text-slate-500" /></div>
-                                    <div><div className="text-[9px] font-black uppercase text-[var(--text-muted)] tracking-wider">Serial / IMEI</div><div className="text-sm font-mono font-bold text-[var(--text-main)] tracking-wide">{ticket.serial_number || 'N/A'}</div></div>
+                                <div className="flex items-center gap-3 px-4 py-2 bg-[var(--bg-surface)] rounded-xl border border-[var(--border-color)] shadow-sm">
+                                    <div className="p-2 bg-[var(--bg-subtle)] rounded-lg shadow-inner border border-[var(--border-color)]"><Fingerprint size={16} className="text-emerald-500" /></div>
+                                    <div>
+                                        <div className="text-[9px] font-black uppercase text-[var(--text-muted)] tracking-widest mb-0.5">Serial / IMEI</div>
+                                        <div className="text-sm font-mono font-bold text-[var(--text-main)] tracking-wide leading-none">{ticket.serial_number || 'N/A'}</div>
+                                    </div>
                                 </div>
                             </div>
 
-                            <div className="relative mb-10">
-                                <div className="absolute -left-3 top-0 bottom-0 w-1 bg-[var(--border-color)] rounded-full"></div>
+                            {/* Customer Defect Box */}
+                            <div className="relative mb-8">
+                                <div className="absolute -left-3 top-0 bottom-0 w-1 bg-amber-400 rounded-full"></div>
                                 <div className="pl-6">
-                                    <h3 className="text-xs font-bold uppercase text-[var(--text-muted)] mb-3 flex items-center gap-2"><AlertCircle size={14} className="text-orange-500" /> Customer Stated Defect</h3>
-                                    <div className="p-5 rounded-xl bg-[var(--bg-subtle)] border border-[var(--border-color)] text-[var(--text-main)] font-medium leading-relaxed whitespace-pre-wrap shadow-inner relative overflow-hidden">
-                                        <div className="absolute top-2 right-4 text-6xl font-serif text-[var(--border-color)] opacity-50 pointer-events-none">”</div>
+                                    <h3 className="text-[10px] font-black uppercase text-[var(--text-muted)] tracking-widest mb-3 flex items-center gap-2"><AlertCircle size={14} className="text-amber-500" /> Customer Stated Defect</h3>
+                                    <div className="p-5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-color)] text-[var(--text-main)] font-medium text-sm leading-relaxed whitespace-pre-wrap shadow-sm relative overflow-hidden">
+                                        <div className="absolute top-2 right-4 text-6xl font-serif text-[var(--border-color)] opacity-30 pointer-events-none">”</div>
                                         {ticket.description || "No description provided at intake."}
                                     </div>
                                 </div>
                             </div>
 
                             {/* --- COLLAPSIBLE INTAKE PHOTOS --- */}
-                            <div className="mb-6 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-2xl shadow-sm animate-fade-in-up overflow-hidden transition-all duration-300">
+                            <div className="mb-8 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-2xl shadow-sm animate-fade-in-up overflow-hidden transition-all duration-300">
                                 <div onClick={() => setIsPhotosCollapsed(!isPhotosCollapsed)} className="p-5 flex justify-between items-center cursor-pointer hover:bg-[var(--bg-subtle)] transition-colors group select-none">
                                     <div className="flex items-center gap-3">
-                                        <div className={`p-2 rounded-lg transition-colors ${!isPhotosCollapsed ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30' : 'bg-[var(--bg-subtle)] text-[var(--text-muted)] group-hover:text-indigo-500'}`}><Camera size={18} /></div>
-                                        <div><h3 className="text-xs font-black uppercase text-[var(--text-muted)] tracking-widest flex items-center gap-2">Intake Photos {images.length > 0 && <span className="badge badge-sm badge-neutral">{images.length}</span>}</h3><p className="text-[10px] font-bold text-[var(--text-muted)] opacity-60 mt-0.5">{isPhotosCollapsed ? 'Click to view evidence' : 'Condition & Accessories'}</p></div>
+                                        <div className={`p-2 rounded-lg transition-colors border border-[var(--border-color)] ${!isPhotosCollapsed ? 'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/30 dark:border-indigo-800' : 'bg-[var(--bg-subtle)] text-[var(--text-muted)] group-hover:text-indigo-500 shadow-inner'}`}>
+                                            <Camera size={18} />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-[10px] font-black uppercase text-[var(--text-main)] tracking-widest flex items-center gap-2">
+                                                Intake Photos {images.length > 0 && <span className="px-1.5 py-0.5 rounded bg-[var(--bg-subtle)] border border-[var(--border-color)] text-[9px] shadow-inner text-[var(--text-muted)]">{images.length}</span>}
+                                            </h3>
+                                            <p className="text-[9px] font-bold text-[var(--text-muted)] opacity-80 mt-1 uppercase tracking-wider">{isPhotosCollapsed ? 'Click to view evidence' : 'Condition & Accessories'}</p>
+                                        </div>
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <div className="relative" onClick={(e) => e.stopPropagation()}>
                                             <input type="file" id="photo-upload" accept="image/*" onChange={handleImageUpload} disabled={uploading} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20" />
-                                            <button className={`btn btn-sm btn-ghost gap-2 text-[var(--text-muted)] hover:text-indigo-600 ${uploading ? 'loading' : ''}`}><PlusCircle size={16} /> <span className="hidden sm:inline">Add</span></button>
+                                            <button className={`btn btn-sm btn-ghost gap-2 text-[var(--text-muted)] hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all ${uploading ? 'loading' : ''}`}>
+                                                <PlusCircle size={16} /> <span className="hidden sm:inline font-bold">Add</span>
+                                            </button>
                                         </div>
-                                        {isPhotosCollapsed ? <ChevronDown size={18} className="text-[var(--text-muted)]" /> : <ChevronUp size={18} className="text-[var(--text-muted)]" />}
+                                        <div className="w-8 h-8 rounded-full bg-[var(--bg-subtle)] border border-[var(--border-color)] flex items-center justify-center text-[var(--text-muted)] shadow-inner">
+                                            {isPhotosCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                                        </div>
                                     </div>
                                 </div>
                                 {!isPhotosCollapsed && (
-                                    <div className="p-5 pt-0 animate-fade-in">
+                                    <div className="p-5 pt-0 animate-fade-in bg-[var(--bg-surface)]">
                                         {images.length === 0 ? (
-                                            <div className="text-center py-8 border-2 border-dashed border-[var(--border-color)] rounded-xl bg-[var(--bg-subtle)]/30"><p className="text-xs font-bold text-[var(--text-muted)] opacity-60">No photos uploaded yet.</p></div>
+                                            <div className="text-center py-10 border-2 border-dashed border-[var(--border-color)] rounded-xl bg-[var(--bg-subtle)] shadow-inner">
+                                                <ImageIcon size={32} className="mx-auto text-[var(--border-color)] mb-2" />
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">No photos uploaded</p>
+                                            </div>
                                         ) : (
-                                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                                                 {images.map((img, idx) => (
-                                                    <div key={idx} onClick={() => openLightbox(img)} className="relative aspect-square rounded-xl overflow-hidden border border-[var(--border-color)] group shadow-sm bg-black cursor-zoom-in hover:ring-2 hover:ring-indigo-500 hover:ring-offset-1 transition-all">
+                                                    <div key={idx} onClick={() => openLightbox(img)} className="relative aspect-square rounded-xl overflow-hidden border border-[var(--border-color)] group shadow-sm bg-[var(--bg-subtle)] cursor-zoom-in hover:ring-2 hover:ring-indigo-500 hover:ring-offset-2 hover:ring-offset-[var(--bg-surface)] transition-all">
                                                         <img src={img.url} alt="Evidence" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 opacity-90 group-hover:opacity-100" />
                                                         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Maximize2 className="text-white drop-shadow-md" size={24} /></div>
-                                                        {isStaff && <button onClick={(e) => promptDeletePhoto(img.name, e)} className="absolute top-2 right-2 btn btn-xs btn-circle btn-error text-white opacity-0 group-hover:opacity-100 transition-opacity z-20 shadow-lg" title="Delete Photo"><Trash2 size={12} /></button>}
+                                                        {isStaff && <button onClick={(e) => promptDeletePhoto(img.name, e)} className="absolute top-2 right-2 btn btn-xs btn-circle bg-red-500 border-none text-white opacity-0 group-hover:opacity-100 transition-opacity z-20 shadow-lg hover:bg-red-600" title="Delete Photo"><Trash2 size={12} /></button>}
                                                     </div>
                                                 ))}
                                             </div>
@@ -757,19 +795,24 @@ export default function TicketDetail() {
                             </div>
 
                             {isStaff && (
-                                <div className="mt-10 animate-fade-in-up">
-                                    <div className="relative flex items-center gap-4 mb-6">
-                                        <div className="h-px bg-[var(--border-color)] flex-1"></div><span className="text-[10px] font-black uppercase text-[var(--text-muted)] tracking-widest flex items-center gap-2 bg-[var(--bg-surface)] px-2"><Wrench size={12} /> Service Control Center</span><div className="h-px bg-[var(--border-color)] flex-1"></div>
-                                    </div>
-                                    <div className={`rounded-2xl border transition-all duration-500 overflow-hidden shadow-sm relative group ${ticket.is_backordered ? 'border-red-400 ring-4 ring-red-500/10 bg-red-50/50 dark:bg-red-900/5' : 'border-[var(--border-color)] bg-[var(--bg-subtle)] hover:shadow-md'}`}>
-                                        <div className={`p-4 flex flex-col sm:flex-row justify-between items-center gap-4 border-b backdrop-blur-sm ${ticket.is_backordered ? 'bg-red-100/50 dark:bg-red-900/30 border-red-200 dark:border-red-800/50' : 'bg-slate-50/80 dark:bg-slate-800/50 border-[var(--border-color)]'}`}>
+                                <div className="mt-8 animate-fade-in-up">
+
+                                    <div className={`rounded-2xl border transition-all duration-500 overflow-hidden shadow-sm relative group ${ticket.is_backordered ? 'border-red-300 dark:border-red-900/80 ring-4 ring-red-500/10 bg-red-50/30 dark:bg-red-900/10' : 'border-[var(--border-color)] bg-[var(--bg-surface)]'}`}>
+                                        <div className={`p-5 flex flex-col sm:flex-row justify-between items-center gap-4 border-b-2 border-dashed ${ticket.is_backordered ? 'bg-red-100/50 dark:bg-red-900/30 border-red-200 dark:border-red-800/50' : 'bg-[var(--bg-surface)] border-[var(--border-color)]'}`}>
                                             <div className="flex items-center gap-3">
-                                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-sm ${ticket.is_backordered ? 'bg-red-500 text-white animate-pulse' : 'bg-white dark:bg-slate-700 text-indigo-600'}`}>{ticket.is_backordered ? <AlertTriangle size={20} /> : <DollarSign size={20} />}</div>
-                                                <div><h4 className={`font-black text-sm uppercase tracking-wide ${ticket.is_backordered ? 'text-red-600 dark:text-red-400' : 'text-[var(--text-main)]'}`}>{ticket.is_backordered ? 'Order Hold Active' : 'Repair Operations'}</h4><p className="text-[10px] font-bold text-[var(--text-muted)]">{ticket.is_backordered ? 'Waiting on vendor parts delivery' : 'Manage estimate, inventory & orders'}</p></div>
+                                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-inner border ${ticket.is_backordered ? 'bg-red-500 text-white border-red-600 animate-pulse' : 'bg-[var(--bg-subtle)] border-[var(--border-color)] text-indigo-600 dark:text-indigo-400'}`}>
+                                                    {ticket.is_backordered ? <AlertTriangle size={18} /> : <Wrench size={18} />}
+                                                </div>
+                                                <div>
+                                                    <h4 className={`font-black text-[10px] uppercase tracking-widest ${ticket.is_backordered ? 'text-red-600 dark:text-red-400' : 'text-[var(--text-main)]'}`}>{ticket.is_backordered ? 'Order Hold Active' : 'Service Control Center'}</h4>
+                                                    <p className="text-[9px] font-bold text-[var(--text-muted)] mt-0.5">{ticket.is_backordered ? 'Waiting on vendor parts delivery' : 'Manage estimate, inventory & orders'}</p>
+                                                </div>
                                             </div>
-                                            <div className="flex items-center gap-3 bg-white dark:bg-slate-900 p-1.5 rounded-full border border-[var(--border-color)] shadow-sm">
-                                                <span className={`text-[10px] font-bold uppercase px-2 ${ticket.is_backordered ? 'text-red-500' : 'text-[var(--text-muted)]'}`}>{ticket.is_backordered ? 'On Hold' : 'Standard'}</span>
-                                                <button onClick={toggleBackorder} disabled={!canEdit} className={`w-12 h-6 rounded-full transition-all relative shadow-inner flex items-center ${ticket.is_backordered ? 'bg-red-500' : 'bg-slate-200 dark:bg-slate-700'} ${!canEdit ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}><div className={`w-5 h-5 bg-white rounded-full shadow-md absolute transition-all duration-300 ${ticket.is_backordered ? 'translate-x-6' : 'translate-x-0.5'}`} /></button>
+                                            <div className="flex items-center gap-3 bg-[var(--bg-subtle)] p-1.5 rounded-full border border-[var(--border-color)] shadow-inner">
+                                                <span className={`text-[9px] font-black uppercase tracking-widest px-2 ${ticket.is_backordered ? 'text-red-500' : 'text-[var(--text-muted)]'}`}>{ticket.is_backordered ? 'On Hold' : 'Standard'}</span>
+                                                <button onClick={toggleBackorder} disabled={!canEdit} className={`w-12 h-6 rounded-full transition-all relative shadow-inner flex items-center ${ticket.is_backordered ? 'bg-red-500' : 'bg-[var(--bg-surface)] border border-[var(--border-color)]'} ${!canEdit ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
+                                                    <div className={`w-5 h-5 bg-white rounded-full shadow-md absolute transition-all duration-300 ${ticket.is_backordered ? 'translate-x-6' : 'translate-x-0.5'}`} />
+                                                </button>
                                             </div>
                                         </div>
                                         <div className={`p-6 space-y-8 ${isClosed ? 'opacity-60 pointer-events-none grayscale-[0.5]' : ''}`}>
@@ -784,36 +827,43 @@ export default function TicketDetail() {
                                             <div className="relative"><div className="absolute -left-6 top-6 bottom-6 w-1 bg-emerald-500/20 rounded-r-full"></div><PartsOrderManager ticketId={id} onActivityLog={handleEstimateLog} onAddToEstimate={() => setEstimateRefreshTrigger(prev => prev + 1)} /></div>
                                             <div className="relative"><div className="absolute -left-6 top-6 bottom-6 w-1 bg-amber-500/20 rounded-r-full"></div><PartSourcing initialQuery={`${ticket.brand} ${ticket.model}`} ticketId={id} onAddToEstimate={() => setEstimateRefreshTrigger(prev => prev + 1)} /></div>
                                         </div>
-                                        {isClosed && <div className="absolute inset-0 z-10 bg-slate-100/50 dark:bg-slate-900/50 backdrop-blur-[1px] flex items-center justify-center"><div className="bg-white dark:bg-slate-800 px-6 py-3 rounded-full shadow-xl border border-[var(--border-color)] flex items-center gap-2"><LockKeyhole size={16} className="text-[var(--text-muted)]" /><span className="text-xs font-bold text-[var(--text-main)]">Ticket Completed - Read Only</span></div></div>}
+                                        {isClosed && (
+                                            <div className="absolute inset-0 z-10 bg-[var(--bg-surface)]/60 backdrop-blur-[2px] flex items-center justify-center">
+                                                <div className="bg-[var(--bg-surface)] px-6 py-3 rounded-full shadow-xl border border-[var(--border-color)] flex items-center gap-2">
+                                                    <LockKeyhole size={16} className="text-[var(--text-muted)]" />
+                                                    <span className="text-[10px] font-black uppercase tracking-widest text-[var(--text-main)]">Ticket Completed - Read Only</span>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             )}
-                            {!isStaff && <div className="animate-fade-in-up mt-6 border-t pt-6"><CustomerEstimateView ticketId={id} /></div>}
+                            {!isStaff && <div className="animate-fade-in-up mt-8 border-t-2 border-dashed border-[var(--border-color)] pt-8"><CustomerEstimateView ticketId={id} /></div>}
                         </div>
 
                         {isManagement && (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in-up p-6 md:p-8 pt-0">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in-up p-6 md:p-8 pt-0 bg-[var(--bg-subtle)] border-t border-[var(--border-color)]">
                                 <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-2xl shadow-sm overflow-hidden flex flex-col h-80">
-                                    <div className="px-5 py-4 bg-slate-50 dark:bg-slate-800/50 border-b border-[var(--border-color)] flex justify-between items-center shrink-0">
-                                        <h2 className="text-[10px] font-bold uppercase text-[var(--text-muted)] tracking-widest flex items-center gap-2"><ShieldAlert size={14} className="text-indigo-600" /> Restricted Activity Log</h2>
-                                        <div className="px-2 py-0.5 bg-white dark:bg-slate-700 rounded-md border border-[var(--border-color)] text-[10px] font-mono text-[var(--text-muted)] shadow-sm">{auditLogs.length} Records</div>
+                                    <div className="px-5 py-4 bg-[var(--bg-surface)] border-b-2 border-dashed border-[var(--border-color)] flex justify-between items-center shrink-0">
+                                        <h2 className="text-[10px] font-black uppercase text-[var(--text-main)] tracking-widest flex items-center gap-2"><ShieldAlert size={14} className="text-indigo-600" /> Restricted Log</h2>
+                                        <div className="px-2 py-1 bg-[var(--bg-subtle)] rounded-md border border-[var(--border-color)] text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] shadow-inner">{auditLogs.length} Records</div>
                                     </div>
-                                    <div className="overflow-y-auto custom-scrollbar flex-1 bg-[var(--bg-surface)]">
+                                    <div className="overflow-y-auto custom-scrollbar flex-1 bg-[var(--bg-surface)] p-2">
                                         {auditLogs.length === 0 ? (
-                                            <div className="h-full flex flex-col items-center justify-center text-[var(--text-muted)] opacity-60"><History size={24} className="mb-2" /><p className="text-xs italic">No activity recorded yet.</p></div>
+                                            <div className="h-full flex flex-col items-center justify-center text-[var(--text-muted)] opacity-60"><History size={24} className="mb-2" /><p className="text-[10px] font-bold uppercase tracking-widest">No activity recorded</p></div>
                                         ) : (
-                                            <div className="divide-y divide-[var(--border-color)]">
+                                            <div className="space-y-1">
                                                 {auditLogs.map(log => {
                                                     const visuals = getLogVisuals(log.action);
                                                     return (
-                                                        <div key={log.id} onClick={() => setSelectedLog(log)} className="px-5 py-3 flex items-start gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors group relative pr-10">
-                                                            <div className={`w-8 h-8 rounded-full flex-none flex items-center justify-center shadow-sm border border-transparent ${visuals.bg}`}>{visuals.icon}</div>
+                                                        <div key={log.id} onClick={() => setSelectedLog(log)} className="px-4 py-3 flex items-start gap-3 hover:bg-[var(--bg-subtle)] rounded-xl cursor-pointer transition-colors group relative pr-10 border border-transparent hover:border-[var(--border-color)]">
+                                                            <div className={`w-8 h-8 rounded-full flex-none flex items-center justify-center shadow-inner ${visuals.bg}`}>{visuals.icon}</div>
                                                             <div className="flex-1 min-w-0">
-                                                                <div className="flex justify-between items-baseline mb-0.5"><span className="text-[10px] font-black uppercase tracking-wider opacity-50">{log.action.split(' ')[0]}</span><span className="text-[9px] text-[var(--text-muted)] font-medium">{format(new Date(log.created_at), 'MMM d, h:mm a')}</span></div>
+                                                                <div className="flex justify-between items-baseline mb-0.5"><span className="text-[9px] font-black uppercase tracking-widest opacity-60 text-[var(--text-main)]">{log.action.split(' ')[0]}</span><span className="text-[9px] text-[var(--text-muted)] font-bold">{format(new Date(log.created_at), 'MMM d, h:mm a')}</span></div>
                                                                 <div className="text-xs font-bold text-[var(--text-main)] truncate">{log.details}</div>
-                                                                <div className="text-[9px] text-[var(--text-muted)] mt-0.5 flex items-center gap-1"><User size={8} /><span className="opacity-80">{log.actor_name.split(' ')[0]}</span></div>
+                                                                <div className="text-[9px] font-bold text-[var(--text-muted)] mt-1 flex items-center gap-1 uppercase tracking-wider"><User size={10} /><span className="opacity-80">{log.actor_name.split(' ')[0]}</span></div>
                                                             </div>
-                                                            {userRole === 'admin' && <button onClick={(e) => promptDeleteLog(log, e)} className="absolute right-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-all transform scale-90 hover:scale-100 btn btn-ghost btn-xs btn-square text-red-400 hover:bg-red-50 hover:text-red-600 hover:border-red-200" title="Delete Log Entry"><Trash2 size={14} /></button>}
+                                                            {userRole === 'admin' && <button onClick={(e) => promptDeleteLog(log, e)} className="absolute right-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-all transform scale-90 hover:scale-100 btn btn-ghost btn-xs btn-square text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 hover:border-red-200" title="Delete Log Entry"><Trash2 size={14} /></button>}
                                                         </div>
                                                     );
                                                 })}
@@ -821,35 +871,87 @@ export default function TicketDetail() {
                                         )}
                                     </div>
                                 </div>
-                                <div className="border-2 border-dashed border-[var(--border-color)] rounded-2xl flex flex-col items-center justify-center p-6 text-[var(--text-muted)] bg-slate-50/50 dark:bg-slate-800/20 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors h-80 cursor-default group">
-                                    <div className="w-16 h-16 rounded-full bg-white dark:bg-slate-800 shadow-sm flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-500"><PlusCircle size={32} className="opacity-30 text-[var(--text-main)]" /></div>
-                                    <span className="font-black text-xs uppercase tracking-widest opacity-60">System Module Slot</span><span className="text-[10px] opacity-40 mt-1">Reserved for future expansion</span>
+                                <div className="border-2 border-dashed border-[var(--border-color)] rounded-2xl flex flex-col items-center justify-center p-6 text-[var(--text-muted)] bg-[var(--bg-subtle)] shadow-inner opacity-70 h-80 cursor-not-allowed">
+                                    <div className="w-16 h-16 rounded-full bg-[var(--bg-surface)] border border-[var(--border-color)] shadow-sm flex items-center justify-center mb-4"><PlusCircle size={28} className="opacity-30 text-[var(--text-main)]" /></div>
+                                    <span className="font-black text-[10px] uppercase tracking-widest text-[var(--text-main)] opacity-60">System Module Slot</span><span className="text-[9px] font-bold uppercase tracking-wider opacity-50 mt-1">Reserved for expansion</span>
                                 </div>
                             </div>
                         )}
                     </div>
                 </div>
-                <div className="hidden lg:block col-span-1"><div className="rounded-2xl shadow-xl flex flex-col h-[600px] overflow-hidden border border-[var(--border-color)] bg-[var(--bg-surface)] sticky top-24">{renderChatInterface()}</div></div>
+
+                {/* RIGHT SIDEBAR: CHAT */}
+                <div className="hidden lg:block col-span-1">
+                    <div className="rounded-2xl shadow-xl flex flex-col h-[600px] overflow-hidden border border-[var(--border-color)] bg-[var(--bg-surface)] sticky top-24">
+                        {renderChatInterface()}
+                    </div>
+                </div>
             </div>
 
+            {/* MOBILE CHAT TOGGLE */}
             <button onClick={() => setIsMobileChatOpen(true)} className="lg:hidden fixed bottom-6 right-6 btn btn-circle btn-lg btn-gradient text-white shadow-2xl z-40"><MessageSquare size={28} /></button>
-            {isMobileChatOpen && (<div className="fixed inset-0 z-50 lg:hidden flex flex-col bg-[var(--bg-surface)] animate-slide-up"><div className="relative z-50 p-4 border-b border-[var(--border-color)] flex justify-between items-center shadow-sm bg-[var(--bg-surface)]"><h3 className="font-black text-lg text-[var(--text-main)] flex items-center gap-2">Ticket Communications</h3><button onClick={() => setIsMobileChatOpen(false)} className="btn btn-circle btn-ghost text-[var(--text-muted)]"><X size={28} /></button></div><div className="flex-1 overflow-hidden relative z-0">{renderChatInterface()}</div></div>)}
+
+            {/* MOBILE CHAT MODAL */}
+            {isMobileChatOpen && (
+                <div className="fixed inset-0 z-50 lg:hidden flex flex-col bg-[var(--bg-surface)] animate-slide-up">
+                    <div className="relative z-50 p-4 border-b border-[var(--border-color)] flex justify-between items-center shadow-sm bg-[var(--bg-surface)]">
+                        <h3 className="font-black text-[10px] uppercase tracking-widest text-[var(--text-main)] flex items-center gap-2">Ticket Communications</h3>
+                        <button onClick={() => setIsMobileChatOpen(false)} className="btn btn-circle btn-sm btn-ghost text-[var(--text-muted)]"><X size={20} /></button>
+                    </div>
+                    <div className="flex-1 overflow-hidden relative z-0">{renderChatInterface()}</div>
+                </div>
+            )}
+
+            {/* SCANNER */}
             {isScanning && (<QRScanner onClose={() => setIsScanning(false)} onScan={(result) => { setIsScanning(false); setTimeout(() => { navigate(`/ticket/${result.includes('/ticket/') ? result.split('/ticket/')[1] : result}`); }, 100); }} />)}
 
             {/* --- MODALS --- */}
             {isEditModalOpen && (
                 <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
                     <div className="bg-[var(--bg-surface)] w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden animate-pop border border-[var(--border-color)] flex flex-col max-h-[90vh]">
-                        <div className="p-6 border-b border-[var(--border-color)] bg-slate-100 dark:bg-slate-800 flex justify-between items-center"><div><h3 className="font-black text-xl text-[var(--text-main)] flex items-center gap-2"><Edit3 size={22} className="text-indigo-600" /> Edit Ticket Specs</h3><p className="text-xs font-bold text-[var(--text-muted)] mt-1 uppercase tracking-wide">Core Device Information</p></div><button onClick={() => setIsEditModalOpen(false)} className="btn btn-sm btn-circle btn-ghost text-[var(--text-muted)] hover:bg-[var(--bg-surface)]"><X size={24} /></button></div>
-                        <div className="p-8 overflow-y-auto custom-scrollbar bg-[var(--bg-surface)]">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="form-control"><label className="label text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest mb-1">Device Brand</label><div className="relative group"><div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-[var(--text-muted)] group-focus-within:text-indigo-500 transition-colors"><Tag size={18} /></div><input type="text" className="input input-bordered w-full h-12 pl-12 bg-[var(--bg-subtle)] text-[var(--text-main)] font-bold focus:bg-[var(--bg-surface)] focus:border-indigo-500 transition-all text-base" placeholder="e.g. Dyson" value={editForm.brand || ''} onChange={e => setEditForm({ ...editForm, brand: e.target.value })} /></div></div>
-                                <div className="form-control"><label className="label text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest mb-1">Model Name/No.</label><div className="relative group"><div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-[var(--text-muted)] group-focus-within:text-indigo-500 transition-colors"><Cpu size={18} /></div><input type="text" className="input input-bordered w-full h-12 pl-12 bg-[var(--bg-subtle)] text-[var(--text-main)] font-bold focus:bg-[var(--bg-surface)] focus:border-indigo-500 transition-all text-base" placeholder="e.g. V11 Animal" value={editForm.model || ''} onChange={e => setEditForm({ ...editForm, model: e.target.value })} /></div></div>
-                                <div className="form-control md:col-span-2"><label className="label text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest mb-1">Serial Number / IMEI</label><div className="relative group"><div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-[var(--text-muted)] group-focus-within:text-indigo-500 transition-colors"><Hash size={18} /></div><input type="text" className="input input-bordered w-full h-12 pl-12 bg-[var(--bg-subtle)] text-[var(--text-main)] font-mono font-medium focus:bg-[var(--bg-surface)] focus:border-indigo-500 transition-all text-base" placeholder="S/N: 123-456-789" value={editForm.serial_number || ''} onChange={e => setEditForm({ ...editForm, serial_number: e.target.value })} /></div></div>
-                                <div className="form-control md:col-span-2"><label className="label text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest mb-1">Customer Stated Issue</label><div className="relative group"><textarea className="textarea textarea-bordered w-full h-32 p-4 bg-[var(--bg-subtle)] text-[var(--text-main)] text-base font-medium leading-relaxed focus:bg-[var(--bg-surface)] focus:border-indigo-500 transition-all resize-none" placeholder="Describe the issue in detail..." value={editForm.description || ''} onChange={e => setEditForm({ ...editForm, description: e.target.value })}></textarea><div className="absolute top-4 right-4 pointer-events-none opacity-20 text-[var(--text-muted)]"><AlertCircle size={24} /></div></div></div>
+                        <div className="p-6 border-b-2 border-dashed border-[var(--border-color)] bg-[var(--bg-surface)] flex justify-between items-center">
+                            <div>
+                                <h3 className="font-black text-xl text-[var(--text-main)] flex items-center gap-2"><Edit3 size={22} className="text-indigo-600" /> Edit Ticket Specs</h3>
+                                <p className="text-[10px] font-black text-[var(--text-muted)] mt-1 uppercase tracking-widest">Core Device Information</p>
+                            </div>
+                            <button onClick={() => setIsEditModalOpen(false)} className="btn btn-sm btn-circle btn-ghost text-[var(--text-muted)] hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"><X size={20} /></button>
+                        </div>
+                        <div className="p-8 overflow-y-auto custom-scrollbar bg-[var(--bg-subtle)]">
+                            <div className="bg-[var(--bg-surface)] p-6 rounded-xl border border-[var(--border-color)] shadow-sm grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="form-control">
+                                    <label className="label text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest mb-1">Device Brand</label>
+                                    <div className="relative group">
+                                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-[var(--text-muted)] group-focus-within:text-indigo-500 transition-colors"><Tag size={16} /></div>
+                                        <input type="text" className="input input-bordered w-full h-12 pl-11 bg-[var(--bg-subtle)] text-[var(--text-main)] font-bold shadow-inner focus:bg-[var(--bg-surface)] focus:border-indigo-500 transition-all text-sm" placeholder="e.g. Dyson" value={editForm.brand || ''} onChange={e => setEditForm({ ...editForm, brand: e.target.value })} />
+                                    </div>
+                                </div>
+                                <div className="form-control">
+                                    <label className="label text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest mb-1">Model Name/No.</label>
+                                    <div className="relative group">
+                                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-[var(--text-muted)] group-focus-within:text-indigo-500 transition-colors"><Cpu size={16} /></div>
+                                        <input type="text" className="input input-bordered w-full h-12 pl-11 bg-[var(--bg-subtle)] text-[var(--text-main)] font-bold shadow-inner focus:bg-[var(--bg-surface)] focus:border-indigo-500 transition-all text-sm" placeholder="e.g. V11 Animal" value={editForm.model || ''} onChange={e => setEditForm({ ...editForm, model: e.target.value })} />
+                                    </div>
+                                </div>
+                                <div className="form-control md:col-span-2">
+                                    <label className="label text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest mb-1">Serial Number / IMEI</label>
+                                    <div className="relative group">
+                                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-[var(--text-muted)] group-focus-within:text-indigo-500 transition-colors"><Hash size={16} /></div>
+                                        <input type="text" className="input input-bordered w-full h-12 pl-11 bg-[var(--bg-subtle)] text-[var(--text-main)] font-mono font-bold shadow-inner focus:bg-[var(--bg-surface)] focus:border-indigo-500 transition-all text-sm tracking-wide" placeholder="Optional" value={editForm.serial_number || ''} onChange={e => setEditForm({ ...editForm, serial_number: e.target.value })} />
+                                    </div>
+                                </div>
+                                <div className="form-control md:col-span-2">
+                                    <label className="label text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest mb-1">Customer Stated Issue</label>
+                                    <div className="relative group">
+                                        <textarea className="textarea textarea-bordered w-full h-32 p-4 bg-[var(--bg-subtle)] text-[var(--text-main)] text-sm font-medium leading-relaxed shadow-inner focus:bg-[var(--bg-surface)] focus:border-indigo-500 transition-all resize-none" placeholder="Describe the issue in detail..." value={editForm.description || ''} onChange={e => setEditForm({ ...editForm, description: e.target.value })}></textarea>
+                                        <div className="absolute top-4 right-4 pointer-events-none opacity-20 text-[var(--text-muted)]"><AlertCircle size={20} /></div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                        <div className="p-6 border-t border-[var(--border-color)] bg-[var(--bg-subtle)] flex justify-end gap-3"><button onClick={() => setIsEditModalOpen(false)} className="btn btn-ghost text-[var(--text-muted)] hover:bg-[var(--bg-surface)] font-bold h-12 px-6">Cancel</button><button onClick={handleSaveEdit} className="btn btn-gradient text-white shadow-lg shadow-indigo-500/30 px-8 hover:scale-[1.02] transition-transform h-12 gap-2"><Save size={20} /> Save Changes</button></div>
+                        <div className="p-5 border-t-2 border-dashed border-[var(--border-color)] bg-[var(--bg-surface)] flex justify-end gap-3 shadow-[0_-4px_10px_-1px_rgba(0,0,0,0.05)]">
+                            <button onClick={() => setIsEditModalOpen(false)} className="btn btn-ghost text-[var(--text-muted)] hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 font-bold transition-all px-6">Cancel</button>
+                            <button onClick={handleSaveEdit} className="btn btn-gradient text-white shadow-lg shadow-indigo-500/30 px-8 hover:scale-105 transition-transform border-none gap-2"><Save size={18} strokeWidth={2.5} /> Save Changes</button>
+                        </div>
                     </div>
                 </div>
             )}
@@ -866,7 +968,7 @@ export default function TicketDetail() {
                     <div className="absolute top-4 right-4 z-50 flex gap-2" onClick={e => e.stopPropagation()}>
                         <div className="bg-black/50 backdrop-blur-md rounded-full p-1 flex items-center border border-white/10">
                             <button onClick={() => handleZoom('out')} className="btn btn-circle btn-sm btn-ghost text-white hover:bg-white/20"><ZoomOut size={18} /></button>
-                            <span className="text-xs font-mono font-bold text-white w-12 text-center">{Math.round(zoomLevel * 100)}%</span>
+                            <span className="text-[10px] font-mono font-black tracking-widest text-white w-12 text-center">{Math.round(zoomLevel * 100)}%</span>
                             <button onClick={() => handleZoom('in')} className="btn btn-circle btn-sm btn-ghost text-white hover:bg-white/20"><ZoomIn size={18} /></button>
                         </div>
                         <button onClick={closeLightbox} className="btn btn-circle btn-sm bg-white text-black hover:bg-white/80 border-none shadow-lg"><X size={20} /></button>
@@ -888,7 +990,7 @@ export default function TicketDetail() {
                         />
                     </div>
 
-                    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 text-white text-xs font-mono pointer-events-none">
+                    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur-md px-5 py-2 rounded-full border border-white/10 text-white text-[10px] uppercase font-black tracking-widest pointer-events-none">
                         {!isNaN(Number(lightboxImage.name.split('.')[0])) ? new Date(Number(lightboxImage.name.split('.')[0])).toLocaleString() : lightboxImage.name}
                     </div>
                 </div>
@@ -896,47 +998,52 @@ export default function TicketDetail() {
 
             {/* --- LOG DETAILS MODAL --- */}
             {selectedLog && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setSelectedLog(null)}>
-                    <div className="bg-[var(--bg-surface)] w-full max-w-md rounded-2xl shadow-2xl border border-[var(--border-color)] flex flex-col overflow-hidden animate-pop" onClick={e => e.stopPropagation()}>
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in" onClick={() => setSelectedLog(null)}>
+                    <div className="bg-[var(--bg-surface)] w-full max-w-md rounded-2xl shadow-2xl border border-[var(--border-color)] flex flex-col overflow-hidden animate-pop ring-1 ring-white/20" onClick={e => e.stopPropagation()}>
 
-                        {/* Header */}
-                        <div className="p-5 border-b border-[var(--border-color)] bg-[var(--bg-subtle)] flex justify-between items-center">
-                            <h3 className="font-black text-lg text-[var(--text-main)] flex items-center gap-2">
-                                <History size={18} className="text-indigo-500" /> Activity Details
-                            </h3>
-                            <button onClick={() => setSelectedLog(null)} className="btn btn-sm btn-circle btn-ghost text-[var(--text-muted)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-main)] transition-colors">
+                        <div className="p-5 border-b-2 border-dashed border-[var(--border-color)] bg-[var(--bg-surface)] flex justify-between items-center">
+                            <div>
+                                <h3 className="font-black text-lg text-[var(--text-main)] flex items-center gap-2">
+                                    <History size={18} className="text-indigo-500" /> Activity Details
+                                </h3>
+                            </div>
+                            <button onClick={() => setSelectedLog(null)} className="btn btn-sm btn-circle btn-ghost text-[var(--text-muted)] hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all">
                                 <X size={20} />
                             </button>
                         </div>
 
-                        {/* Body */}
-                        <div className="p-6 space-y-4">
-                            <div>
-                                <div className="text-[10px] font-black uppercase text-[var(--text-muted)] tracking-widest mb-1">Action</div>
-                                <div className="font-bold text-[var(--text-main)] text-base">{selectedLog.action}</div>
-                            </div>
-                            <div>
-                                <div className="text-[10px] font-black uppercase text-[var(--text-muted)] tracking-widest mb-1">Performed By</div>
-                                <div className="flex items-center gap-2 font-medium text-[var(--text-main)]">
-                                    <User size={14} className="text-[var(--text-muted)]" /> {selectedLog.actor_name}
+                        <div className="p-6 space-y-5 bg-[var(--bg-subtle)]">
+                            <div className="bg-[var(--bg-surface)] p-5 rounded-xl border border-[var(--border-color)] shadow-sm space-y-4">
+                                <div>
+                                    <div className="text-[9px] font-black uppercase text-[var(--text-muted)] tracking-widest mb-1">Action</div>
+                                    <div className="font-black text-[var(--text-main)] text-sm">{selectedLog.action}</div>
                                 </div>
-                            </div>
-                            <div>
-                                <div className="text-[10px] font-black uppercase text-[var(--text-muted)] tracking-widest mb-1">Timestamp</div>
-                                <div className="font-medium text-[var(--text-main)] text-sm">{format(new Date(selectedLog.created_at), 'MMM d, yyyy - h:mm:ss a')}</div>
-                            </div>
-                            <div>
-                                <div className="text-[10px] font-black uppercase text-[var(--text-muted)] tracking-widest mb-1">Description</div>
-                                <div className="p-3 bg-[var(--bg-subtle)] rounded-lg text-sm text-[var(--text-main)] border border-[var(--border-color)] shadow-sm">
-                                    {selectedLog.details}
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <div className="text-[9px] font-black uppercase text-[var(--text-muted)] tracking-widest mb-1">Performed By</div>
+                                        <div className="flex items-center gap-1.5 font-bold text-xs text-[var(--text-main)]">
+                                            <User size={12} className="text-[var(--text-muted)]" /> {selectedLog.actor_name}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div className="text-[9px] font-black uppercase text-[var(--text-muted)] tracking-widest mb-1">Timestamp</div>
+                                        <div className="font-bold text-[var(--text-main)] text-xs flex items-center gap-1.5">
+                                            <Clock size={12} className="text-[var(--text-muted)]" /> {format(new Date(selectedLog.created_at), 'MMM d, h:mm a')}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="text-[9px] font-black uppercase text-[var(--text-muted)] tracking-widest mb-1.5">Description</div>
+                                    <div className="p-3 bg-[var(--bg-subtle)] rounded-lg text-sm font-medium text-[var(--text-main)] shadow-inner border border-[var(--border-color)]">
+                                        {selectedLog.details}
+                                    </div>
                                 </div>
                             </div>
 
-                            {/* System Metadata (Now using theme variables!) */}
                             {selectedLog.metadata && Object.keys(selectedLog.metadata).length > 0 && (
                                 <div>
-                                    <div className="text-[10px] font-black uppercase text-[var(--text-muted)] tracking-widest mb-1">System Metadata</div>
-                                    <pre className="p-3 bg-[var(--bg-subtle)] text-[var(--text-main)] rounded-lg text-xs overflow-x-auto border border-[var(--border-color)] font-mono shadow-inner opacity-90">
+                                    <div className="text-[9px] font-black uppercase text-[var(--text-muted)] tracking-widest mb-1.5 pl-1">System Metadata</div>
+                                    <pre className="p-4 bg-[var(--bg-surface)] text-[var(--text-main)] rounded-xl text-[10px] overflow-x-auto border border-[var(--border-color)] font-mono shadow-sm">
                                         {JSON.stringify(selectedLog.metadata, null, 2)}
                                     </pre>
                                 </div>
@@ -954,19 +1061,19 @@ export default function TicketDetail() {
                     <div className="relative w-full max-w-sm bg-[var(--bg-surface)] rounded-2xl shadow-[0_20px_50px_-12px_rgba(0,0,0,0.5)] overflow-hidden border border-[var(--border-color)] animate-pop ring-1 ring-red-500/20">
                         <div className="h-1.5 w-full bg-gradient-to-r from-red-500 via-orange-500 to-red-500"></div>
                         <div className="p-8">
-                            <div className="mx-auto w-20 h-20 bg-red-50 dark:bg-red-900/20 rounded-full flex items-center justify-center mb-6 relative">
+                            <div className="mx-auto w-20 h-20 bg-red-50 dark:bg-red-900/20 rounded-full flex items-center justify-center mb-6 relative border border-red-100 dark:border-red-800">
                                 <div className="absolute inset-0 rounded-full bg-red-500/20 animate-ping opacity-50"></div>
                                 <Trash2 size={36} className="text-red-600 dark:text-red-500 relative z-10" />
                             </div>
                             <div className="text-center mb-8">
-                                <h3 className="text-2xl font-black text-[var(--text-main)] mb-2">Delete {photoToDelete ? 'Photo' : 'Log'}?</h3>
-                                <p className="text-sm text-[var(--text-muted)] leading-relaxed">
+                                <h3 className="text-xl font-black text-[var(--text-main)] mb-2">Delete {photoToDelete ? 'Photo' : 'Log'}?</h3>
+                                <p className="text-sm font-medium text-[var(--text-muted)] leading-relaxed">
                                     This action cannot be undone. This item will be <strong className="text-red-500">permanently erased</strong>.
                                 </p>
                             </div>
                             <div className="grid grid-cols-2 gap-3">
-                                <button onClick={() => { setLogToDelete(null); setPhotoToDelete(null); }} className="btn btn-ghost h-12 font-bold text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] border border-transparent hover:border-[var(--border-color)]">Cancel</button>
-                                <button onClick={photoToDelete ? confirmDeletePhoto : executeDeleteLog} className="btn btn-error h-12 text-white font-bold shadow-lg shadow-red-500/30 border-none bg-gradient-to-br from-red-500 to-red-600 hover:scale-[1.02] transition-transform">Yes, Delete</button>
+                                <button onClick={() => { setLogToDelete(null); setPhotoToDelete(null); }} className="btn btn-ghost h-12 font-bold text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] border border-transparent hover:border-[var(--border-color)] transition-all">Cancel</button>
+                                <button onClick={photoToDelete ? confirmDeletePhoto : executeDeleteLog} className="btn btn-error h-12 text-white font-bold shadow-lg shadow-red-500/30 border-none bg-gradient-to-br from-red-500 to-red-600 hover:scale-105 transition-transform">Yes, Delete</button>
                             </div>
                         </div>
                     </div>

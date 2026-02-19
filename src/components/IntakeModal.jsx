@@ -175,7 +175,6 @@ export default function IntakeModal({ isOpen, onClose, onTicketCreated, initialC
         if (errors[field]) setErrors(prev => ({ ...prev, [field]: false }));
     };
 
-    // Helper for initials
     const getInitials = (name) => {
         if (!name) return '??';
         const parts = name.trim().split(' ');
@@ -193,33 +192,35 @@ export default function IntakeModal({ isOpen, onClose, onTicketCreated, initialC
             <div className="bg-[var(--bg-surface)] w-full max-w-2xl rounded-2xl shadow-2xl border border-[var(--border-color)] flex flex-col max-h-[90vh] overflow-hidden animate-pop ring-1 ring-white/20">
 
                 {/* HEADER */}
-                <div className="p-5 border-b border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-surface)]">
+                <div className="p-5 border-b-2 border-dashed border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-surface)]">
                     <div>
                         <h2 className="text-xl font-black text-[var(--text-main)] flex items-center gap-2 tracking-tight">
                             <FileText size={22} className="text-indigo-600" /> New Repair Intake
                         </h2>
                         <p className="text-xs text-[var(--text-muted)] mt-1 font-medium pl-8">Enter customer and device details below</p>
                     </div>
-                    <button onClick={onClose} className="btn btn-sm btn-circle btn-ghost text-[var(--text-muted)] hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                    {/* UPDATED: X Close Button */}
+                    <button
+                        onClick={onClose}
+                        className="btn btn-sm btn-circle btn-ghost text-[var(--text-muted)] hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 border border-transparent hover:border-red-200 dark:hover:border-red-900/30 transition-all"
+                    >
                         <X size={20} />
                     </button>
                 </div>
 
-                <div className="overflow-y-auto p-6 space-y-8 bg-slate-50/50 dark:bg-slate-900/20">
+                {/* BODY */}
+                <div className="overflow-y-auto p-6 space-y-8 bg-[var(--bg-subtle)]">
 
-                    {/* SECTION 1: CUSTOMER SELECTION */}
                     <div className="bg-[var(--bg-surface)] p-5 rounded-xl border border-[var(--border-color)] shadow-sm">
-
-                        {/* Custom Segmented Control */}
-                        <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg mb-5">
+                        <div className="flex bg-[var(--bg-subtle)] p-1.5 rounded-xl mb-6 shadow-inner border border-[var(--border-color)]">
                             <button
-                                className={`flex-1 py-2 text-sm font-bold rounded-md transition-all flex items-center justify-center gap-2 ${activeTab === 'existing' ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center gap-2 ${activeTab === 'existing' ? 'bg-[var(--bg-surface)] text-indigo-600 shadow-sm ring-1 ring-black/5 dark:ring-white/5' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
                                 onClick={() => { setActiveTab('existing'); setErrors({}); }}
                             >
                                 <Search size={14} /> Existing Customer
                             </button>
                             <button
-                                className={`flex-1 py-2 text-sm font-bold rounded-md transition-all flex items-center justify-center gap-2 ${activeTab === 'new' ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all flex items-center justify-center gap-2 ${activeTab === 'new' ? 'bg-[var(--bg-surface)] text-indigo-600 shadow-sm ring-1 ring-black/5 dark:ring-white/5' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
                                 onClick={() => { setActiveTab('new'); setErrors({}); }}
                             >
                                 <User size={14} /> New Customer
@@ -228,14 +229,13 @@ export default function IntakeModal({ isOpen, onClose, onTicketCreated, initialC
 
                         {activeTab === 'existing' ? (
                             <div className="relative">
-                                {/* Search Bar */}
                                 {!selectedCustomer && (
                                     <div className="relative group">
-                                        <Search className="absolute left-3 top-3.5 text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={18} />
+                                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)] group-focus-within:text-indigo-500 transition-colors" size={18} />
                                         <input
                                             type="text"
                                             placeholder="Search by Name or Phone Number..."
-                                            className={`input input-bordered w-full pl-10 font-medium h-12 bg-white dark:bg-slate-800 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all ${getErrorClass('customerSearch')}`}
+                                            className={`input input-bordered w-full pl-11 font-medium h-12 bg-[var(--bg-subtle)] text-[var(--text-main)] shadow-inner focus:bg-[var(--bg-surface)] focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all ${getErrorClass('customerSearch')}`}
                                             value={searchTerm}
                                             onChange={(e) => {
                                                 setSearchTerm(e.target.value);
@@ -246,29 +246,28 @@ export default function IntakeModal({ isOpen, onClose, onTicketCreated, initialC
                                     </div>
                                 )}
 
-                                {/* Auto-Complete Results */}
                                 {searchResults.length > 0 && !selectedCustomer && (
-                                    <ul className="absolute z-10 w-full mt-2 bg-white dark:bg-slate-800 border border-[var(--border-color)] rounded-xl shadow-xl max-h-56 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-700">
+                                    <ul className="absolute z-10 w-full mt-2 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl shadow-xl max-h-56 overflow-y-auto divide-y divide-[var(--border-color)]">
                                         {searchResults.map(customer => (
                                             <li key={customer.id}
-                                                className="p-3 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer flex justify-between items-center transition-colors group"
+                                                className="p-3 hover:bg-[var(--bg-subtle)] cursor-pointer flex justify-between items-center transition-colors group"
                                                 onClick={() => {
                                                     setSelectedCustomer(customer);
                                                     setSearchTerm(customer.full_name);
-                                                    setSearchResults([]);
+                                                    searchResults.length = 0;
                                                     clearError('customerSearch');
                                                 }}
                                             >
                                                 <div className="flex items-center gap-3">
-                                                    <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-600 flex items-center justify-center text-xs font-bold text-slate-600 dark:text-slate-300">
+                                                    <div className="w-8 h-8 rounded-full bg-[var(--bg-subtle)] border border-[var(--border-color)] flex items-center justify-center text-xs font-bold text-[var(--text-muted)]">
                                                         {getInitials(customer.full_name)}
                                                     </div>
                                                     <div>
-                                                        <div className="font-bold text-[var(--text-main)] text-sm group-hover:text-indigo-600">{customer.full_name}</div>
+                                                        <div className="font-bold text-[var(--text-main)] text-sm group-hover:text-indigo-600 transition-colors">{customer.full_name}</div>
                                                         <div className="text-xs text-[var(--text-muted)]">{customer.email}</div>
                                                     </div>
                                                 </div>
-                                                <div className="font-mono text-xs font-medium text-[var(--text-muted)] bg-slate-100 dark:bg-slate-900 px-2 py-1 rounded">
+                                                <div className="font-mono text-xs font-medium text-[var(--text-muted)] bg-[var(--bg-subtle)] px-2 py-1 rounded border border-[var(--border-color)]">
                                                     {formatPhoneNumber(customer.phone)}
                                                 </div>
                                             </li>
@@ -276,81 +275,79 @@ export default function IntakeModal({ isOpen, onClose, onTicketCreated, initialC
                                     </ul>
                                 )}
 
-                                {/* Selected Customer Card */}
                                 {selectedCustomer && (
-                                    <div className="bg-indigo-50/50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 rounded-xl p-4 flex items-center justify-between animate-pop">
+                                    <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] border-l-[4px] border-l-indigo-500 rounded-xl p-4 flex items-center justify-between shadow-sm animate-pop">
                                         <div className="flex items-center gap-4">
-                                            <div className="w-12 h-12 rounded-full bg-indigo-100 dark:bg-indigo-900 text-indigo-600 dark:text-indigo-300 flex items-center justify-center text-lg font-black shadow-sm border border-indigo-200">
+                                            <div className="w-12 h-12 rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-lg font-black shadow-inner border border-indigo-200 dark:border-indigo-800">
                                                 {getInitials(selectedCustomer.full_name)}
                                             </div>
                                             <div>
-                                                <div className="font-black text-slate-800 dark:text-white flex items-center gap-2">
+                                                <div className="font-black text-[var(--text-main)] flex items-center gap-2">
                                                     {selectedCustomer.full_name}
-                                                    <span className="badge badge-sm badge-success gap-1 text-white"><CheckCircle size={10} /> Verified</span>
+                                                    <span className="badge badge-sm border-none bg-emerald-500 text-white gap-1 shadow-md shadow-emerald-500/20"><CheckCircle size={10} strokeWidth={3} /> Verified</span>
                                                 </div>
-                                                <div className="text-xs text-slate-500 font-medium flex gap-3 mt-1">
-                                                    <span className="flex items-center gap-1"><Phone size={10} /> {formatPhoneNumber(selectedCustomer.phone)}</span>
-                                                    {selectedCustomer.email && <span className="flex items-center gap-1"><Mail size={10} /> {selectedCustomer.email}</span>}
+                                                <div className="text-xs text-[var(--text-muted)] font-medium flex gap-3 mt-1.5">
+                                                    <span className="flex items-center gap-1"><Phone size={12} /> {formatPhoneNumber(selectedCustomer.phone)}</span>
+                                                    {selectedCustomer.email && <span className="flex items-center gap-1"><Mail size={12} /> {selectedCustomer.email}</span>}
                                                 </div>
                                             </div>
                                         </div>
                                         {!initialCustomer && (
-                                            <button onClick={() => { setSelectedCustomer(null); setSearchTerm('') }} className="btn btn-sm btn-ghost text-red-500 hover:bg-red-50">Change</button>
+                                            <button onClick={() => { setSelectedCustomer(null); setSearchTerm('') }} className="btn btn-sm btn-ghost text-[var(--text-muted)] hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all">Change</button>
                                         )}
                                     </div>
                                 )}
                             </div>
                         ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                 <div className="form-control">
-                                    <label className="label text-xs font-bold uppercase text-slate-400 pb-1">Full Name</label>
-                                    <input type="text" placeholder="John Doe" className={`input input-bordered w-full font-medium bg-white dark:bg-slate-800 ${getErrorClass('new_name')}`} value={newCustomer.full_name} onChange={e => { setNewCustomer({ ...newCustomer, full_name: e.target.value }); clearError('new_name'); }} />
+                                    <label className="label text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] pb-1.5">Full Name</label>
+                                    <input type="text" placeholder="John Doe" className={`input input-bordered w-full font-medium bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] shadow-inner transition-all ${getErrorClass('new_name')}`} value={newCustomer.full_name} onChange={e => { setNewCustomer({ ...newCustomer, full_name: e.target.value }); clearError('new_name'); }} />
                                 </div>
                                 <div className="form-control">
-                                    <label className="label text-xs font-bold uppercase text-slate-400 pb-1">Email Address</label>
-                                    <input type="email" placeholder="john@example.com" className="input input-bordered w-full font-medium bg-white dark:bg-slate-800" value={newCustomer.email} onChange={e => setNewCustomer({ ...newCustomer, email: e.target.value })} />
+                                    <label className="label text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] pb-1.5">Email Address</label>
+                                    <input type="email" placeholder="john@example.com" className="input input-bordered w-full font-medium bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] shadow-inner transition-all" value={newCustomer.email} onChange={e => setNewCustomer({ ...newCustomer, email: e.target.value })} />
                                 </div>
                                 <div className="form-control md:col-span-2">
-                                    <label className="label text-xs font-bold uppercase text-slate-400 pb-1">Phone Number</label>
-                                    <input type="tel" placeholder="(555) 123-4567" className={`input input-bordered w-full font-medium bg-white dark:bg-slate-800 ${getErrorClass('new_phone')}`} value={newCustomer.phone} onChange={e => { setNewCustomer({ ...newCustomer, phone: e.target.value }); clearError('new_phone'); }} />
+                                    <label className="label text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] pb-1.5">Phone Number</label>
+                                    <input type="tel" placeholder="(555) 123-4567" className={`input input-bordered w-full font-medium bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] shadow-inner transition-all ${getErrorClass('new_phone')}`} value={newCustomer.phone} onChange={e => { setNewCustomer({ ...newCustomer, phone: e.target.value }); clearError('new_phone'); }} />
                                 </div>
                             </div>
                         )}
                     </div>
 
-                    {/* SECTION 2: DEVICE INFO */}
                     <div className="bg-[var(--bg-surface)] p-5 rounded-xl border border-[var(--border-color)] shadow-sm">
-                        <h3 className="text-xs font-bold uppercase text-[var(--text-muted)] tracking-wider mb-4 flex items-center gap-2 border-b border-[var(--border-color)] pb-2">
-                            <Smartphone size={16} className="text-emerald-500" /> Device Information
+                        <h3 className="text-[10px] font-black uppercase text-[var(--text-muted)] tracking-widest mb-5 flex items-center gap-2 border-b-2 border-dashed border-[var(--border-color)] pb-3">
+                            <Smartphone size={16} className="text-indigo-500" /> Device Information
                         </h3>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
                             <div className="form-control">
-                                <label className="label text-xs font-bold uppercase text-slate-400 pb-1">Brand</label>
-                                <input type="text" list="brand-list" placeholder="e.g. Dyson" className={`input input-bordered w-full font-bold bg-white dark:bg-slate-800 focus:border-emerald-500 ${getErrorClass('brand')}`} value={device.brand} onChange={e => { setDevice({ ...device, brand: e.target.value }); clearError('brand'); }} />
+                                <label className="label text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] pb-1.5">Brand</label>
+                                <input type="text" list="brand-list" placeholder="e.g. Dyson" className={`input input-bordered w-full font-bold bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] shadow-inner transition-all focus:border-indigo-500 ${getErrorClass('brand')}`} value={device.brand} onChange={e => { setDevice({ ...device, brand: e.target.value }); clearError('brand'); }} />
                                 <datalist id="brand-list">{uniqueBrands.map(brand => <option key={brand} value={brand} />)}</datalist>
                             </div>
                             <div className="form-control">
-                                <label className="label text-xs font-bold uppercase text-slate-400 pb-1">Model</label>
-                                <input type="text" list="model-list" placeholder="e.g. V11 Animal" className={`input input-bordered w-full font-bold bg-white dark:bg-slate-800 focus:border-emerald-500 ${getErrorClass('model')}`} value={device.model} onChange={e => { setDevice({ ...device, model: e.target.value }); clearError('model'); }} />
+                                <label className="label text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] pb-1.5">Model</label>
+                                <input type="text" list="model-list" placeholder="e.g. V11 Animal" className={`input input-bordered w-full font-bold bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] shadow-inner transition-all focus:border-indigo-500 ${getErrorClass('model')}`} value={device.model} onChange={e => { setDevice({ ...device, model: e.target.value }); clearError('model'); }} />
                                 <datalist id="model-list">{filteredModels.map(model => <option key={model} value={model} />)}</datalist>
                             </div>
                             <div className="md:col-span-2 relative form-control">
-                                <label className="label text-xs font-bold uppercase text-slate-400 pb-1">Serial Number</label>
-                                <div className="relative">
-                                    <Hash className="absolute left-3 top-3.5 text-slate-400" size={16} />
-                                    <input type="text" placeholder="Optional" className="input input-bordered w-full pl-10 font-mono text-sm bg-white dark:bg-slate-800 focus:border-emerald-500" value={device.serial} onChange={e => setDevice({ ...device, serial: e.target.value })} />
+                                <label className="label text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] pb-1.5">Serial Number</label>
+                                <div className="relative group">
+                                    <Hash className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)] group-focus-within:text-indigo-500 transition-colors" size={16} />
+                                    <input type="text" placeholder="Optional" className="input input-bordered w-full pl-11 font-mono text-sm bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] shadow-inner transition-all focus:border-indigo-500" value={device.serial} onChange={e => setDevice({ ...device, serial: e.target.value })} />
                                 </div>
                             </div>
                         </div>
 
                         <div className="form-control">
-                            <label className="label text-xs font-bold uppercase text-slate-400 pb-1 flex justify-between">
+                            <label className="label text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] pb-1.5 flex justify-between">
                                 <span>Issue Description</span>
                                 {errors.description && <span className="text-red-500 flex items-center gap-1"><AlertCircle size={10} /> Required</span>}
                             </label>
                             <textarea
-                                className={`textarea textarea-bordered w-full h-32 text-base leading-relaxed bg-white dark:bg-slate-800 focus:border-emerald-500 ${getTextAreaErrorClass('description')}`}
+                                className={`textarea textarea-bordered w-full h-32 text-sm font-medium leading-relaxed bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] shadow-inner transition-all focus:border-indigo-500 ${getTextAreaErrorClass('description')}`}
                                 placeholder="Describe the issue... (e.g. Motor makes loud grinding noise)"
                                 value={device.description}
                                 onChange={e => { setDevice({ ...device, description: e.target.value }); clearError('description'); }}
@@ -359,11 +356,17 @@ export default function IntakeModal({ isOpen, onClose, onTicketCreated, initialC
                     </div>
                 </div>
 
-                {/* Footer */}
-                <div className="p-5 border-t border-[var(--border-color)] bg-[var(--bg-surface)] flex justify-end gap-3 z-10 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-                    <button onClick={onClose} className="btn btn-ghost font-bold text-[var(--text-muted)] hover:bg-slate-100 dark:hover:bg-slate-800">Cancel</button>
-                    <button onClick={handleSubmit} disabled={isSubmitting} className="btn btn-gradient px-8 shadow-lg text-white font-bold tracking-wide transition-transform active:scale-95">
-                        {isSubmitting ? <span className="loading loading-spinner"></span> : <><Save size={18} /> Create Ticket</>}
+                {/* FOOTER */}
+                <div className="p-5 border-t-2 border-dashed border-[var(--border-color)] bg-[var(--bg-surface)] flex justify-end gap-3 z-10 shadow-[0_-4px_10px_-1px_rgba(0,0,0,0.05)]">
+                    {/* UPDATED: Cancel Button */}
+                    <button
+                        onClick={onClose}
+                        className="btn btn-ghost font-bold text-[var(--text-muted)] hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 border border-transparent hover:border-red-200 dark:hover:border-red-900/30 transition-all"
+                    >
+                        Cancel
+                    </button>
+                    <button onClick={handleSubmit} disabled={isSubmitting} className="btn btn-gradient px-8 shadow-lg text-white font-bold tracking-wide transition-transform hover:scale-105 active:scale-95 border-none">
+                        {isSubmitting ? <span className="loading loading-spinner"></span> : <><Save size={18} strokeWidth={2.5} /> Create Ticket</>}
                     </button>
                 </div>
             </div>
