@@ -1,307 +1,260 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
-import { Plus, Trash2, DollarSign, Box, MapPin, Hash, RotateCcw, Wrench, PenTool } from 'lucide-react';
-import { formatCurrency } from '../utils';
+import { Plus, Trash2, DollarSign, Calculator, Send, AlertCircle, CheckCircle, XCircle, Wrench, Package, RotateCcw, Lock } from 'lucide-react';
 import { useToast } from '../context/ToastProvider';
+import { formatCurrency } from '../utils';
 
-export default function EstimateBuilder({ ticketId, onTotalChange, onActivityLog, refreshTrigger, estimateStatus = 'draft', onUpdateStatus }) {
+export default function EstimateBuilder({ ticketId, onTotalChange, onActivityLog, refreshTrigger, estimateStatus, onUpdateStatus }) {
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [newItem, setNewItem] = useState({ type: 'part', description: '', quantity: 1, unit_price: '' });
     const { addToast } = useToast();
 
-    // New Item Form
-    const [newItem, setNewItem] = useState({ description: '', part_cost: '', labor_cost: '' });
-
-    // State for "Restock Confirmation"
-    const [itemToDelete, setItemToDelete] = useState(null);
-
-    // REFRESH LOGIC
     useEffect(() => {
         fetchItems();
     }, [ticketId, refreshTrigger]);
 
-    useEffect(() => {
-        // STOP: Don't report totals while we are still fetching data.
-        if (loading) return;
-
-        const total = items.reduce((sum, item) => sum + (item.part_cost || 0) + (item.labor_cost || 0), 0);
-        if (onTotalChange) onTotalChange(total);
-    }, [items, loading]);
-
     async function fetchItems() {
-        const { data } = await supabase.from('estimate_items').select('*').eq('ticket_id', ticketId).order('created_at');
-        setItems(data || []);
+        setLoading(true);
+        const { data, error } = await supabase
+            .from('estimate_items')
+            .select('*')
+            .eq('ticket_id', ticketId)
+            .order('created_at', { ascending: true });
+
+        if (error) {
+            console.error("Error fetching estimate items:", error);
+        } else {
+            setItems(data || []);
+            calculateAndEmitTotal(data || []);
+        }
         setLoading(false);
     }
 
-    const handleAddItem = async () => {
-        if (!newItem.description) return;
+    const calculateAndEmitTotal = (currentItems) => {
+        const subtotal = currentItems.reduce((sum, item) => sum + (item.part_cost || 0) + (item.labor_cost || 0), 0);
+        const taxRate = 0.07;
+        const grandTotal = subtotal + (subtotal * taxRate);
+        onTotalChange(grandTotal);
+    };
 
-        const partCost = parseFloat(newItem.part_cost) || 0;
-        const laborCost = parseFloat(newItem.labor_cost) || 0;
+    const handleAddItem = async (e) => {
+        e.preventDefault();
+        if (!newItem.description || !newItem.unit_price) return;
 
-        const { data, error } = await supabase.from('estimate_items').insert([{
-            ticket_id: ticketId,
-            description: newItem.description,
-            part_cost: partCost,
-            labor_cost: laborCost
-        }]).select().single();
+        const price = parseFloat(newItem.unit_price);
+        const qty = parseInt(newItem.quantity) || 1;
+        const totalLineCost = price * qty;
+        
+        const isLabor = newItem.type === 'labor';
+        
+        let finalDescription = newItem.description;
+        if (qty > 1) finalDescription = `${qty}x ${finalDescription}`;
+        if (isLabor) finalDescription = `(Labor) ${finalDescription}`;
+
+        const { data, error } = await supabase
+            .from('estimate_items')
+            .insert([{
+                ticket_id: ticketId,
+                description: finalDescription,
+                part_cost: isLabor ? 0 : totalLineCost,
+                labor_cost: isLabor ? totalLineCost : 0,
+                is_approved: false // Explicitly mark new items as not approved
+            }])
+            .select();
 
         if (error) {
-            addToast("Failed to add item", "error");
+            console.error("Insert Error:", error);
+            addToast(`DB Error: ${error.message}`, "error");
         } else {
-            setItems([...items, data]);
-            setNewItem({ description: '', part_cost: '', labor_cost: '' });
-            if (onActivityLog) onActivityLog('ESTIMATE ADD', `Added item: ${newItem.description} ($${partCost + laborCost})`);
+            const updatedItems = [...items, data[0]];
+            setItems(updatedItems);
+            calculateAndEmitTotal(updatedItems);
+            
+            setNewItem({ ...newItem, description: '', quantity: 1, unit_price: '' });
+            addToast("Item added to estimate", "success");
+            onActivityLog('ESTIMATE ITEM ADDED', `Added ${finalDescription} ($${totalLineCost})`);
         }
     };
 
-    // --- SMART DELETE HANDLER ---
-    const initiateDelete = (item) => {
-        if (item.inventory_id) {
-            setItemToDelete(item);
+    const handleDeleteItem = async (itemId, description) => {
+        const { error } = await supabase.from('estimate_items').delete().eq('id', itemId);
+        if (error) {
+            addToast("Failed to delete item", "error");
         } else {
-            performDelete(item.id, false);
+            const updatedItems = items.filter(i => i.id !== itemId);
+            setItems(updatedItems);
+            calculateAndEmitTotal(updatedItems);
+            onActivityLog('ESTIMATE ITEM REMOVED', `Removed ${description} from estimate`);
         }
     };
 
-    const performDelete = async (itemId, restock) => {
-        const itemToRemove = items.find(i => i.id === itemId);
-        if (!itemToRemove) return;
-
-        try {
-            // 1. Restock logic
-            if (restock && itemToRemove.inventory_id) {
-                const { data: currentInv } = await supabase.from('inventory').select('quantity').eq('id', itemToRemove.inventory_id).single();
-                if (currentInv) {
-                    await supabase.from('inventory').update({ quantity: currentInv.quantity + 1 }).eq('id', itemToRemove.inventory_id);
-                    addToast("Item returned to inventory", "info");
-                }
-            }
-
-            // 2. Delete item
-            const { error } = await supabase.from('estimate_items').delete().eq('id', itemId);
-            if (error) throw error;
-
-            setItems(items.filter(i => i.id !== itemId));
-            setItemToDelete(null);
-
-            if (onActivityLog) {
-                const action = restock ? 'PART RESTOCKED' : 'ESTIMATE REMOVE';
-                const note = restock
-                    ? `Removed ${itemToRemove.description} and returned to stock`
-                    : `Removed item: ${itemToRemove.description}`;
-                onActivityLog(action, note);
-            }
-
-        } catch (error) {
-            console.error(error);
-            addToast("Failed to remove item", "error");
+    const handleSendToCustomer = async () => {
+        const pendingItems = items.filter(i => i.is_approved !== true);
+        if (pendingItems.length === 0) {
+            addToast("There are no new items to request approval for.", "error");
+            return;
         }
+        onUpdateStatus('sent');
+        onActivityLog('ESTIMATE SENT', 'Change order sent to customer for approval.');
     };
 
-    const grandTotal = items.reduce((sum, item) => sum + (item.part_cost || 0) + (item.labor_cost || 0), 0);
+    const handleResetToDraft = () => {
+        onUpdateStatus('draft');
+        onActivityLog('ESTIMATE UNLOCKED', 'Estimate was unlocked to add additional parts/labor.');
+    };
 
-    if (loading) return <div className="p-4 text-center"><span className="loading loading-spinner text-primary"></span></div>;
+    // Math Breakdowns
+    const approvedItems = items.filter(i => i.is_approved === true);
+    const pendingItems = items.filter(i => i.is_approved !== true);
+    
+    const approvedSubtotal = approvedItems.reduce((sum, item) => sum + (item.part_cost || 0) + (item.labor_cost || 0), 0);
+    const pendingSubtotal = pendingItems.reduce((sum, item) => sum + (item.part_cost || 0) + (item.labor_cost || 0), 0);
+    const taxRate = 0.07; 
 
     return (
-        <div className="bg-[var(--bg-surface)] rounded-2xl border border-[var(--border-color)] overflow-hidden shadow-sm relative flex flex-col transition-all duration-300 hover:shadow-md">
-
-            {/* --- 1. DISTINCT HEADER --- */}
-            <div className="px-5 py-4 bg-slate-50 dark:bg-slate-800/50 border-b border-[var(--border-color)] flex justify-between items-center shrink-0">
+        <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-2xl shadow-sm overflow-hidden flex flex-col relative group transition-all">
+            
+            {/* Header */}
+            <div className="p-5 border-b-2 border-dashed border-[var(--border-color)] bg-[var(--bg-surface)] flex justify-between items-center z-10 relative">
+                <h3 className="text-[10px] font-black uppercase text-[var(--text-main)] tracking-widest flex items-center gap-2">
+                    <Calculator size={16} className="text-indigo-600" /> Estimate Builder
+                </h3>
                 <div className="flex items-center gap-2">
-                    <div className="p-1.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 rounded-lg">
-                        <DollarSign size={18} />
-                    </div>
-                    <div>
-                        <h3 className="font-black text-[var(--text-main)] text-sm uppercase tracking-wide">Repair Estimate</h3>
-                        <p className="text-[10px] font-bold text-[var(--text-muted)]">Parts & Labor Breakdown</p>
-                    </div>
-                </div>
-                <div className="text-right">
-                    <span className="block text-2xl font-black text-emerald-600 tracking-tight">{formatCurrency(grandTotal)}</span>
-                </div>
-            </div>
-
-            {/* --- 2. SCROLLABLE LIST AREA --- */}
-            <div className="p-4 space-y-3 bg-[var(--bg-surface)] min-h-[120px]">
-                {items.length === 0 && (
-                    <div className="h-32 flex flex-col items-center justify-center text-[var(--text-muted)] border-2 border-dashed border-[var(--border-color)] rounded-xl opacity-60">
-                        <PenTool size={24} className="mb-2" />
-                        <span className="text-xs font-bold uppercase tracking-wider">No items added</span>
-                    </div>
-                )}
-
-                {items.map(item => (
-                    <div key={item.id} className="group relative bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl p-3.5 transition-all hover:border-indigo-300 dark:hover:border-indigo-700 hover:shadow-sm">
-
-                        <div className="flex justify-between items-start gap-3">
-                            {/* LEFT: ITEM DETAILS */}
-                            <div className="flex-1">
-                                {/* Top Row: Badges */}
-                                {item.inventory_id ? (
-                                    <div className="flex gap-2 mb-1.5">
-                                        <span className="text-[9px] font-black uppercase bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 px-1.5 py-0.5 rounded flex items-center gap-1">
-                                            <Box size={10} /> Stock Part
-                                        </span>
-                                        {item.bin_location && (
-                                            <span className="text-[9px] font-bold uppercase bg-slate-100 dark:bg-slate-800 text-slate-500 px-1.5 py-0.5 rounded flex items-center gap-1">
-                                                <MapPin size={10} /> {item.bin_location}
-                                            </span>
-                                        )}
-                                    </div>
-                                ) : (
-                                    <div className="flex gap-2 mb-1.5">
-                                        <span className="text-[9px] font-black uppercase bg-slate-100 dark:bg-slate-800 text-slate-500 px-1.5 py-0.5 rounded flex items-center gap-1">
-                                            <Wrench size={10} /> Custom / Labor
-                                        </span>
-                                    </div>
-                                )}
-
-                                {/* Main Description */}
-                                <div className="font-bold text-[var(--text-main)] text-sm md:text-base leading-tight">
-                                    {item.description}
-                                </div>
-
-                                {/* SKU */}
-                                {item.sku && (
-                                    <div className="text-xs text-[var(--text-muted)] font-mono mt-1 opacity-75">
-                                        #{item.sku}
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* RIGHT: PRICING */}
-                            <div className="text-right">
-                                <div className="font-black text-[var(--text-main)] text-lg">{formatCurrency(item.part_cost + item.labor_cost)}</div>
-                                <div className="text-[10px] font-bold text-[var(--text-muted)] mt-0.5">
-                                    {item.labor_cost > 0 ? (
-                                        <span className="flex items-center justify-end gap-2">
-                                            <span>P: {formatCurrency(item.part_cost)}</span>
-                                            <span className="w-px h-3 bg-[var(--border-color)]"></span>
-                                            <span>L: {formatCurrency(item.labor_cost)}</span>
-                                        </span>
-                                    ) : 'Part Only'}
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* DELETE BUTTON (Floating) */}
-                        <button
-                            onClick={() => initiateDelete(item)}
-                            className="absolute -right-2 -top-2 btn btn-xs btn-circle btn-error text-white opacity-0 group-hover:opacity-100 transition-all shadow-md scale-90 group-hover:scale-100"
+                    {estimateStatus === 'approved' && <span className="bg-emerald-500 text-white text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded shadow-sm shadow-emerald-500/30 flex items-center gap-1"><CheckCircle size={10} /> Approved</span>}
+                    {estimateStatus === 'declined' && <span className="bg-red-500 text-white text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded shadow-sm shadow-red-500/30 flex items-center gap-1"><XCircle size={10} /> Declined</span>}
+                    {estimateStatus === 'sent' && <span className="bg-amber-500 text-white text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded shadow-sm shadow-amber-500/30 flex items-center gap-1"><AlertCircle size={10} /> Pending Approval</span>}
+                    {(!estimateStatus || estimateStatus === 'draft') && <span className="bg-[var(--bg-subtle)] border border-[var(--border-color)] text-[var(--text-muted)] text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded shadow-inner">Draft Mode</span>}
+                    
+                    {/* UNDO / RESET BUTTON */}
+                    {estimateStatus && estimateStatus !== 'draft' && (
+                        <button 
+                            onClick={handleResetToDraft} 
+                            className="btn btn-xs btn-ghost px-2 gap-1 text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-all border border-transparent hover:border-amber-200 dark:hover:border-amber-800 rounded-md" 
+                            title="Unlock to add more items"
                         >
-                            <Trash2 size={12} />
-                        </button>
-                    </div>
-                ))}
-            </div>
-
-            {/* --- 3. CONTROL DECK (ADD FORM) --- */}
-            <div className="p-4 bg-slate-50/50 dark:bg-slate-800/20 border-t border-[var(--border-color)]">
-                <div className="text-[10px] font-black uppercase text-[var(--text-muted)] mb-2 tracking-widest flex items-center gap-1">
-                    <Plus size={10} /> Add Custom Line Item
-                </div>
-                <div className="flex flex-col md:flex-row gap-3">
-                    <div className="relative flex-1">
-                        <input
-                            type="text"
-                            placeholder="Description (e.g. Labor - 1 Hour)"
-                            className="input input-bordered w-full bg-[var(--bg-surface)] text-[var(--text-main)] h-11 text-sm font-medium focus:border-indigo-500 pl-4"
-                            value={newItem.description}
-                            onChange={e => setNewItem({ ...newItem, description: e.target.value })}
-                        />
-                    </div>
-                    <div className="flex gap-2">
-                        <div className="relative w-24">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] text-xs font-bold">$</span>
-                            <input
-                                type="number"
-                                placeholder="Part"
-                                className="input input-bordered w-full bg-[var(--bg-surface)] text-[var(--text-main)] h-11 text-sm font-bold pl-6 focus:border-indigo-500"
-                                value={newItem.part_cost}
-                                onChange={e => setNewItem({ ...newItem, part_cost: e.target.value })}
-                            />
-                        </div>
-                        <div className="relative w-24">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] text-xs font-bold">$</span>
-                            <input
-                                type="number"
-                                placeholder="Labor"
-                                className="input input-bordered w-full bg-[var(--bg-surface)] text-[var(--text-main)] h-11 text-sm font-bold pl-6 focus:border-indigo-500"
-                                value={newItem.labor_cost}
-                                onChange={e => setNewItem({ ...newItem, labor_cost: e.target.value })}
-                            />
-                        </div>
-                        <button
-                            onClick={handleAddItem}
-                            className="btn btn-square btn-gradient text-white h-11 w-11 shadow-sm hover:scale-105 transition-transform"
-                            disabled={!newItem.description}
-                        >
-                            <Plus size={20} />
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            {/* --- 4. ESTIMATE STATUS & ACTIONS --- */}
-            <div className="p-4 bg-slate-100 dark:bg-slate-800/50 border-t border-[var(--border-color)] flex flex-col md:flex-row justify-between items-center gap-4">
-                <div className="flex items-center gap-3">
-                    <span className="text-xs font-bold uppercase text-[var(--text-muted)]">Customer Visibility:</span>
-                    {estimateStatus === 'draft' && <span className="badge badge-neutral font-bold uppercase tracking-wider text-[10px]">Draft (Hidden)</span>}
-                    {estimateStatus === 'sent' && <span className="badge badge-warning font-bold uppercase tracking-wider text-[10px]">Awaiting Approval</span>}
-                    {estimateStatus === 'approved' && <span className="badge badge-success text-white font-bold uppercase tracking-wider text-[10px]">Approved</span>}
-                    {estimateStatus === 'declined' && <span className="badge badge-error text-white font-bold uppercase tracking-wider text-[10px]">Declined</span>}
-                </div>
-
-                <div className="flex gap-2 w-full md:w-auto">
-                    {estimateStatus === 'draft' ? (
-                        <button
-                            onClick={() => onUpdateStatus && onUpdateStatus('sent')}
-                            disabled={items.length === 0}
-                            className="btn btn-sm btn-primary shadow-md flex-1 md:flex-none"
-                        >
-                            Send to Customer
-                        </button>
-                    ) : (
-                        <button
-                            onClick={() => onUpdateStatus && onUpdateStatus('draft')}
-                            className="btn btn-sm btn-ghost border border-[var(--border-color)] text-[var(--text-muted)] flex-1 md:flex-none"
-                        >
-                            Recall / Edit Draft
+                            <RotateCcw size={10} /> Add Items
                         </button>
                     )}
                 </div>
             </div>
 
-            {/* --- RESTOCK CONFIRMATION MODAL --- */}
-            {itemToDelete && (
-                <div className="absolute inset-0 z-10 bg-white/95 dark:bg-black/90 backdrop-blur-sm flex flex-col items-center justify-center p-6 animate-fade">
-                    <div className="bg-[var(--bg-surface)] p-6 rounded-2xl shadow-xl border border-[var(--border-color)] w-full max-w-sm text-center transform transition-all scale-100">
-                        <div className="w-12 h-12 bg-amber-100 dark:bg-amber-900/30 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-3">
-                            <RotateCcw size={24} />
+            {/* Content Area */}
+            <div className="p-5 bg-[var(--bg-subtle)] flex-1 relative z-10">
+                
+                {/* Manual Add Item Form (Only shows if Draft/Unlocked) */}
+                {(!estimateStatus || estimateStatus === 'draft') && (
+                    <form onSubmit={handleAddItem} className="mb-6 p-4 bg-[var(--bg-surface)] rounded-xl border border-[var(--border-color)] shadow-sm">
+                        <div className="flex bg-[var(--bg-subtle)] p-1 rounded-lg shadow-inner border border-[var(--border-color)] mb-4">
+                            <button type="button" onClick={() => setNewItem({...newItem, type: 'part'})} className={`flex-1 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-md transition-all flex items-center justify-center gap-1.5 ${newItem.type === 'part' ? 'bg-[var(--bg-surface)] text-indigo-600 shadow-sm ring-1 ring-black/5 dark:ring-white/5' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>
+                                <Package size={12} /> Part / Item
+                            </button>
+                            <button type="button" onClick={() => setNewItem({...newItem, type: 'labor'})} className={`flex-1 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-md transition-all flex items-center justify-center gap-1.5 ${newItem.type === 'labor' ? 'bg-[var(--bg-surface)] text-amber-600 shadow-sm ring-1 ring-black/5 dark:ring-white/5' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>
+                                <Wrench size={12} /> Labor / Service
+                            </button>
                         </div>
-                        <h3 className="font-black text-lg text-[var(--text-main)]">Restock this item?</h3>
-                        <p className="text-sm text-[var(--text-muted)] mt-1 mb-6 leading-relaxed">
-                            Should <strong>"{itemToDelete.description}"</strong> be added back to your inventory count?
-                        </p>
+                        <div className="flex flex-col sm:flex-row gap-2">
+                            <div className="flex-1">
+                                <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] mb-1 pl-1 block">Description</label>
+                                <input type="text" placeholder={newItem.type === 'labor' ? "e.g. Diagnostic Fee..." : "e.g. Belt, Filter..."} className="input input-sm w-full h-10 bg-[var(--bg-subtle)] border-[var(--border-color)] text-[var(--text-main)] shadow-inner focus:border-indigo-500 font-medium" value={newItem.description} onChange={e => setNewItem({ ...newItem, description: e.target.value })} required />
+                            </div>
+                            <div className="w-full sm:w-20">
+                                <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] mb-1 pl-1 block">{newItem.type === 'labor' ? 'Hours' : 'Qty'}</label>
+                                <input type="number" min="1" className="input input-sm w-full h-10 bg-[var(--bg-subtle)] border-[var(--border-color)] text-[var(--text-main)] shadow-inner focus:border-indigo-500 font-bold text-center" value={newItem.quantity} onChange={e => setNewItem({ ...newItem, quantity: e.target.value })} required />
+                            </div>
+                            <div className="w-full sm:w-28 relative">
+                                <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] mb-1 pl-1 block">{newItem.type === 'labor' ? 'Rate' : 'Price'}</label>
+                                <div className="relative">
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] font-bold">$</span>
+                                    <input type="number" step="0.01" min="0" placeholder="0.00" className="input input-sm w-full h-10 pl-7 bg-[var(--bg-subtle)] border-[var(--border-color)] text-[var(--text-main)] shadow-inner focus:border-indigo-500 font-mono font-bold" value={newItem.unit_price} onChange={e => setNewItem({ ...newItem, unit_price: e.target.value })} required />
+                                </div>
+                            </div>
+                            <div className="flex items-end mt-2 sm:mt-0">
+                                <button type="submit" className="btn btn-sm h-10 w-full sm:w-auto text-white shadow-md border-none px-4 transition-colors bg-indigo-600 hover:bg-indigo-700">
+                                    <Plus size={16} strokeWidth={3} />
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                )}
 
-                        <div className="grid grid-cols-2 gap-3">
-                            <button
-                                onClick={() => performDelete(itemToDelete.id, true)}
-                                className="btn btn-success text-white font-bold"
-                            >
-                                <Box size={16} /> Yes, Restock
-                            </button>
-                            <button
-                                onClick={() => performDelete(itemToDelete.id, false)}
-                                className="btn btn-ghost border border-[var(--border-color)] font-bold text-[var(--text-muted)]"
-                            >
-                                <Trash2 size={16} /> No, Delete
-                            </button>
-                        </div>
-                        <button onClick={() => setItemToDelete(null)} className="btn btn-xs btn-ghost mt-4 text-[var(--text-muted)]">Cancel</button>
+                {/* Line Items Table */}
+                {loading ? (
+                    <div className="text-center py-8"><span className="loading loading-spinner text-indigo-500"></span></div>
+                ) : items.length === 0 ? (
+                    <div className="text-center py-8 border-2 border-dashed border-[var(--border-color)] rounded-xl opacity-60">
+                        <DollarSign size={24} className="mx-auto text-[var(--text-muted)] mb-2" />
+                        <p className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">No items added</p>
                     </div>
+                ) : (
+                    <div className="bg-[var(--bg-surface)] rounded-xl border border-[var(--border-color)] shadow-sm overflow-hidden mb-6">
+                        <table className="w-full text-sm">
+                            <thead className="bg-[var(--bg-subtle)] border-b border-[var(--border-color)]">
+                                <tr>
+                                    <th className="text-left p-3 text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">Item Description</th>
+                                    <th className="text-right p-3 text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] w-24">Cost</th>
+                                    <th className="w-10"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {items.map((item, idx) => {
+                                    const itemTotal = (item.part_cost || 0) + (item.labor_cost || 0);
+                                    const isLabor = item.labor_cost > 0 || (item.description && item.description.startsWith('(Labor)'));
+                                    const cleanDescription = item.description ? item.description.replace('(Labor) ', '') : 'Unknown Item';
+                                    const isApproved = item.is_approved === true;
+
+                                    return (
+                                        <tr key={item.id} className={`${idx !== items.length - 1 ? 'border-b border-dashed border-[var(--border-color)]' : ''} ${isApproved ? 'bg-emerald-50/30 dark:bg-emerald-900/5' : ''}`}>
+                                            <td className="p-3">
+                                                <div className="flex items-center gap-2">
+                                                    {isLabor ? <Wrench size={14} className="text-amber-500 flex-none" /> : <Package size={14} className="text-indigo-500 flex-none" />}
+                                                    <span className={`font-bold ${isApproved ? 'text-[var(--text-muted)]' : 'text-[var(--text-main)]'}`}>{cleanDescription}</span>
+                                                    {isApproved && <span className="flex items-center gap-1 text-[8px] font-black uppercase tracking-widest bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400 px-1.5 py-0.5 rounded"><Lock size={8}/> Locked</span>}
+                                                </div>
+                                            </td>
+                                            <td className={`p-3 text-right font-mono font-black ${isApproved ? 'text-[var(--text-muted)]' : 'text-[var(--text-main)]'}`}>{formatCurrency(itemTotal)}</td>
+                                            <td className="p-3 text-right">
+                                                {!isApproved && (
+                                                    <button onClick={() => handleDeleteItem(item.id, item.description)} className="text-[var(--text-muted)] hover:text-red-500 transition-colors p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-900/20" title="Remove Item"><Trash2 size={14} /></button>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+
+                {/* Totals Summary */}
+                {items.length > 0 && (
+                    <div className="bg-[var(--bg-surface)] p-4 rounded-xl border border-[var(--border-color)] shadow-sm space-y-2">
+                        {approvedItems.length > 0 && (
+                            <div className="flex justify-between items-center text-xs text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-900/10 p-2 rounded-lg border border-emerald-100 dark:border-emerald-800/50">
+                                <span>Previously Approved (w/ Tax)</span>
+                                <span className="font-mono">{formatCurrency(approvedSubtotal + (approvedSubtotal * taxRate))}</span>
+                            </div>
+                        )}
+                        {pendingItems.length > 0 && (
+                            <div className="flex justify-between items-center text-xs text-indigo-600 dark:text-indigo-400 font-bold bg-indigo-50 dark:bg-indigo-900/10 p-2 rounded-lg border border-indigo-100 dark:border-indigo-800/50">
+                                <span>New Pending Charges (w/ Tax)</span>
+                                <span className="font-mono">{formatCurrency(pendingSubtotal + (pendingSubtotal * taxRate))}</span>
+                            </div>
+                        )}
+                        <div className="flex justify-between items-center pt-3 mt-2 border-t border-dashed border-[var(--border-color)]">
+                            <span className="text-[10px] font-black uppercase tracking-widest text-[var(--text-main)]">Total Ticket Value</span>
+                            <span className="text-xl font-black text-[var(--text-main)] tracking-tight">{formatCurrency(approvedSubtotal + pendingSubtotal + ((approvedSubtotal + pendingSubtotal) * taxRate))}</span>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* Footer Action */}
+            {pendingItems.length > 0 && (!estimateStatus || estimateStatus === 'draft') && (
+                <div className="p-4 bg-[var(--bg-surface)] border-t-2 border-dashed border-[var(--border-color)] relative z-10">
+                    <button onClick={handleSendToCustomer} className="btn w-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/30 border-none hover:scale-[1.02] transition-transform gap-2 h-12 rounded-xl">
+                        <Send size={18} /> <span className="font-black tracking-wide text-sm">Lock & Request Approval for {formatCurrency(pendingSubtotal + (pendingSubtotal * taxRate))}</span>
+                    </button>
                 </div>
             )}
         </div>

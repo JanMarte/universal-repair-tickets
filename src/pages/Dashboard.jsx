@@ -7,7 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Search, Filter, Moon, Sun, Plus, XCircle, LogOut, Users, QrCode,
   AlertTriangle, DollarSign, Activity, ChevronDown, ChevronUp, Layers, UserCheck,
-  Package, LayoutGrid, List as ListIcon
+  Package, LayoutGrid, List as ListIcon, Wrench
 } from 'lucide-react';
 import { useToast } from '../context/ToastProvider';
 import QRScanner from '../components/QRScanner';
@@ -139,10 +139,15 @@ export default function Dashboard() {
 
       {/* NAVBAR */}
       <div className="navbar rounded-2xl mb-6 sticky top-2 z-40 animate-fade flex justify-between shadow-sm backdrop-blur-md bg-[var(--bg-surface)] border border-[var(--border-color)] px-3 py-2">
-        <div className="flex-1 min-w-0">
+
+        {/* PREMIUM BRANDING */}
+        <div className="flex-1 min-w-0 flex items-center gap-3">
+          <div className="hidden sm:flex w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl items-center justify-center text-white shadow-lg shadow-indigo-500/20">
+            <Wrench size={20} fill="currentColor" />
+          </div>
           <div className="flex flex-col justify-center leading-tight">
-            <span className="font-black text-[var(--text-main)] text-sm md:text-2xl whitespace-normal md:whitespace-nowrap">
-              University Vacuum & Sewing
+            <span className="font-black text-[var(--text-main)] text-lg md:text-2xl whitespace-nowrap tracking-tight">
+              University <span className="text-indigo-500">Vacuum & Sewing</span>
             </span>
           </div>
         </div>
@@ -184,8 +189,8 @@ export default function Dashboard() {
                 <span className="font-bold text-sm truncate w-full text-[var(--text-main)] leading-tight">{currentUser.email}</span>
                 <div className="flex mt-1.5">
                   <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest shadow-md ${currentUser.role === 'admin' ? 'bg-purple-500 text-white shadow-purple-500/30' :
-                      currentUser.role === 'manager' ? 'bg-indigo-500 text-white shadow-indigo-500/30' :
-                        'bg-slate-500 text-white shadow-slate-500/30'
+                    currentUser.role === 'manager' ? 'bg-indigo-500 text-white shadow-indigo-500/30' :
+                      'bg-slate-500 text-white shadow-slate-500/30'
                     }`}>
                     {currentUser.role}
                   </span>
@@ -288,89 +293,93 @@ export default function Dashboard() {
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 animate-fade">
-        {/* SIDEBAR FILTERS */}
-        <div className="hidden lg:block lg:col-span-1">
-          <div className="sticky top-28 rounded-2xl shadow-sm bg-[var(--bg-surface)] border border-[var(--border-color)]">
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-6 border-b border-[var(--border-color)] pb-4">
-                <h3 className="font-black text-[var(--text-main)] flex gap-2 items-center text-lg"><Filter size={20} className="text-indigo-500" /> Filters</h3>
+      {/* DYNAMIC GRID */}
+      <div className={`grid grid-cols-1 ${viewMode === 'list' ? 'lg:grid-cols-4' : ''} gap-8 animate-fade`}>
 
-                {(statusFilter !== 'ALL' || searchQuery) && (
-                  <button
-                    onClick={clearFilters}
-                    className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-[var(--text-muted)] hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 border border-transparent hover:border-red-200 dark:hover:border-red-900/30 px-2 py-1 rounded-md transition-all"
-                  >
-                    <XCircle size={14} /> Clear
-                  </button>
-                )}
-              </div>
+        {/* SIDEBAR FILTERS (Only visible in List View) */}
+        {viewMode === 'list' && (
+          <div className="hidden lg:block lg:col-span-1">
+            <div className="sticky top-28 rounded-2xl shadow-sm bg-[var(--bg-surface)] border border-[var(--border-color)]">
+              <div className="p-6">
+                <div className="flex justify-between items-center mb-6 border-b border-[var(--border-color)] pb-4">
+                  <h3 className="font-black text-[var(--text-main)] flex gap-2 items-center text-lg"><Filter size={20} className="text-indigo-500" /> Filters</h3>
 
-              <div className="form-control w-full">
-                <label className="label py-0 mb-2"><span className="label-text text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">Ticket Status</span></label>
-                <select className="select select-bordered w-full font-bold shadow-sm bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)]" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-                  <option value="ALL">All Tickets</option>
-                  <option value="ACTIVE">Active Workload</option>
-                  <option value="MY_WORK">👤 My Repairs</option>
-                  <option value="ATTENTION">⚠️ Attention Needed</option>
-                  <hr disabled />
-                  <option value="intake">Intake</option>
-                  <option value="diagnosing">Diagnosing</option>
-                  <option value="repairing">Repairing</option>
-                  <option value="ready_pickup">Ready for Pickup</option>
-                  <option value="completed">Completed</option>
-                </select>
-              </div>
-
-              <div className="form-control w-full mt-5">
-                <label className="label py-0 mb-2"><span className="label-text text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">Search</span></label>
-                <div className="relative group">
-                  <input type="text" className="input input-bordered w-full pl-11 bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] transition-all font-medium" placeholder="ID, name, phone..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)] group-focus-within:text-indigo-500 transition-colors" size={16} />
-                </div>
-              </div>
-
-              <div className="mt-8 space-y-3">
-                <div onClick={() => setStatusFilter('ACTIVE')} className={`flex items-center justify-between p-4 rounded-xl cursor-pointer transition-all duration-300 border ${statusFilter === 'ACTIVE' ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-300 dark:border-emerald-500/50 shadow-md ring-1 ring-emerald-500/20 scale-[1.02]' : 'bg-[var(--bg-subtle)] border-[var(--border-color)] hover:border-emerald-300 dark:hover:border-emerald-600 hover:shadow-md hover:-translate-y-0.5'}`}>
-                  <div>
-                    <div className={`text-[10px] font-black uppercase tracking-widest mb-0.5 ${statusFilter === 'ACTIVE' ? 'text-emerald-600 dark:text-emerald-400' : 'text-[var(--text-muted)]'}`}>Active Repairs</div>
-                    <div className={`text-2xl font-black tracking-tight ${statusFilter === 'ACTIVE' ? 'text-emerald-700 dark:text-emerald-300' : 'text-[var(--text-main)]'}`}>{activeCount}</div>
-                  </div>
-                  <div className={`p-2.5 rounded-xl shadow-sm transition-colors ${statusFilter === 'ACTIVE' ? 'bg-emerald-500 text-white' : 'bg-white dark:bg-slate-800 text-emerald-500 border border-[var(--border-color)]'}`}><Activity size={20} /></div>
+                  {(statusFilter !== 'ALL' || searchQuery) && (
+                    <button
+                      onClick={clearFilters}
+                      className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-[var(--text-muted)] hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 border border-transparent hover:border-red-200 dark:hover:border-red-900/30 px-2 py-1 rounded-md transition-all"
+                    >
+                      <XCircle size={14} /> Clear
+                    </button>
+                  )}
                 </div>
 
-                <div onClick={() => setStatusFilter('MY_WORK')} className={`flex items-center justify-between p-4 rounded-xl cursor-pointer transition-all duration-300 border ${statusFilter === 'MY_WORK' ? 'bg-indigo-50 dark:bg-indigo-500/10 border-indigo-300 dark:border-indigo-500/50 shadow-md ring-1 ring-indigo-500/20 scale-[1.02]' : 'bg-[var(--bg-subtle)] border-[var(--border-color)] hover:border-indigo-300 dark:hover:border-indigo-600 hover:shadow-md hover:-translate-y-0.5'}`}>
-                  <div>
-                    <div className={`text-[10px] font-black uppercase tracking-widest mb-0.5 ${statusFilter === 'MY_WORK' ? 'text-indigo-600 dark:text-indigo-400' : 'text-[var(--text-muted)]'}`}>My Repairs</div>
-                    <div className={`text-2xl font-black tracking-tight ${statusFilter === 'MY_WORK' ? 'text-indigo-700 dark:text-indigo-300' : 'text-[var(--text-main)]'}`}>{myWorkCount}</div>
-                  </div>
-                  <div className={`p-2.5 rounded-xl shadow-sm transition-colors ${statusFilter === 'MY_WORK' ? 'bg-indigo-500 text-white' : 'bg-white dark:bg-slate-800 text-indigo-500 border border-[var(--border-color)]'}`}><UserCheck size={20} /></div>
+                <div className="form-control w-full">
+                  <label className="label py-0 mb-2"><span className="label-text text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">Ticket Status</span></label>
+                  <select className="select select-bordered w-full font-bold shadow-sm bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)]" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+                    <option value="ALL">All Tickets</option>
+                    <option value="ACTIVE">Active Workload</option>
+                    <option value="MY_WORK">👤 My Repairs</option>
+                    <option value="ATTENTION">⚠️ Attention Needed</option>
+                    <hr disabled />
+                    <option value="intake">Intake</option>
+                    <option value="diagnosing">Diagnosing</option>
+                    <option value="repairing">Repairing</option>
+                    <option value="ready_pickup">Ready for Pickup</option>
+                    <option value="completed">Completed</option>
+                  </select>
                 </div>
 
-                <div onClick={() => setStatusFilter('ATTENTION')} className={`flex items-center justify-between p-4 rounded-xl cursor-pointer transition-all duration-300 border ${statusFilter === 'ATTENTION' ? 'bg-amber-50 dark:bg-amber-500/10 border-amber-300 dark:border-amber-500/50 shadow-md ring-1 ring-amber-500/20 scale-[1.02]' : 'bg-[var(--bg-subtle)] border-[var(--border-color)] hover:border-amber-300 dark:hover:border-amber-600 hover:shadow-md hover:-translate-y-0.5'}`}>
-                  <div>
-                    <div className={`text-[10px] font-black uppercase tracking-widest mb-0.5 ${statusFilter === 'ATTENTION' ? 'text-amber-600 dark:text-amber-400' : 'text-[var(--text-muted)]'}`}>Needs Attention</div>
-                    <div className={`text-2xl font-black tracking-tight ${statusFilter === 'ATTENTION' ? 'text-amber-700 dark:text-amber-300' : 'text-[var(--text-main)]'}`}>{urgentCount}</div>
+                <div className="form-control w-full mt-5">
+                  <label className="label py-0 mb-2"><span className="label-text text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">Search</span></label>
+                  <div className="relative group">
+                    <input type="text" className="input input-bordered w-full pl-11 bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] transition-all font-medium" placeholder="ID, name, phone..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)] group-focus-within:text-indigo-500 transition-colors" size={16} />
                   </div>
-                  <div className={`p-2.5 rounded-xl shadow-sm transition-colors ${statusFilter === 'ATTENTION' ? 'bg-amber-500 text-white' : 'bg-white dark:bg-slate-800 text-amber-500 border border-[var(--border-color)]'}`}><AlertTriangle size={20} /></div>
                 </div>
 
-                <div onClick={() => setStatusFilter('ALL')} className={`flex items-center justify-between p-4 rounded-xl cursor-pointer transition-all duration-300 border ${statusFilter === 'ALL' ? 'bg-cyan-50 dark:bg-cyan-500/10 border-cyan-300 dark:border-cyan-500/50 shadow-md ring-1 ring-cyan-500/20 scale-[1.02]' : 'bg-[var(--bg-subtle)] border-[var(--border-color)] hover:border-cyan-300 dark:hover:border-cyan-600 hover:shadow-md hover:-translate-y-0.5'}`}>
-                  <div>
-                    <div className={`text-[10px] font-black uppercase tracking-widest mb-0.5 ${statusFilter === 'ALL' ? 'text-cyan-600 dark:text-cyan-400' : 'text-[var(--text-muted)]'}`}>Est. Revenue</div>
-                    <div className={`text-2xl font-black tracking-tight ${statusFilter === 'ALL' ? 'text-cyan-700 dark:text-cyan-300' : 'text-[var(--text-main)]'}`}>${totalRevenue.toLocaleString()}</div>
+                <div className="mt-8 space-y-3">
+                  <div onClick={() => setStatusFilter('ACTIVE')} className={`flex items-center justify-between p-4 rounded-xl cursor-pointer transition-all duration-300 border ${statusFilter === 'ACTIVE' ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-300 dark:border-emerald-500/50 shadow-md ring-1 ring-emerald-500/20 scale-[1.02]' : 'bg-[var(--bg-subtle)] border-[var(--border-color)] hover:border-emerald-300 dark:hover:border-emerald-600 hover:shadow-md hover:-translate-y-0.5'}`}>
+                    <div>
+                      <div className={`text-[10px] font-black uppercase tracking-widest mb-0.5 ${statusFilter === 'ACTIVE' ? 'text-emerald-600 dark:text-emerald-400' : 'text-[var(--text-muted)]'}`}>Active Repairs</div>
+                      <div className={`text-2xl font-black tracking-tight ${statusFilter === 'ACTIVE' ? 'text-emerald-700 dark:text-emerald-300' : 'text-[var(--text-main)]'}`}>{activeCount}</div>
+                    </div>
+                    <div className={`p-2.5 rounded-xl shadow-sm transition-colors ${statusFilter === 'ACTIVE' ? 'bg-emerald-500 text-white' : 'bg-white dark:bg-slate-800 text-emerald-500 border border-[var(--border-color)]'}`}><Activity size={20} /></div>
                   </div>
-                  <div className={`p-2.5 rounded-xl shadow-sm transition-colors ${statusFilter === 'ALL' ? 'bg-cyan-500 text-white' : 'bg-white dark:bg-slate-800 text-cyan-500 border border-[var(--border-color)]'}`}><DollarSign size={20} /></div>
+
+                  <div onClick={() => setStatusFilter('MY_WORK')} className={`flex items-center justify-between p-4 rounded-xl cursor-pointer transition-all duration-300 border ${statusFilter === 'MY_WORK' ? 'bg-indigo-50 dark:bg-indigo-500/10 border-indigo-300 dark:border-indigo-500/50 shadow-md ring-1 ring-indigo-500/20 scale-[1.02]' : 'bg-[var(--bg-subtle)] border-[var(--border-color)] hover:border-indigo-300 dark:hover:border-indigo-600 hover:shadow-md hover:-translate-y-0.5'}`}>
+                    <div>
+                      <div className={`text-[10px] font-black uppercase tracking-widest mb-0.5 ${statusFilter === 'MY_WORK' ? 'text-indigo-600 dark:text-indigo-400' : 'text-[var(--text-muted)]'}`}>My Repairs</div>
+                      <div className={`text-2xl font-black tracking-tight ${statusFilter === 'MY_WORK' ? 'text-indigo-700 dark:text-indigo-300' : 'text-[var(--text-main)]'}`}>{myWorkCount}</div>
+                    </div>
+                    <div className={`p-2.5 rounded-xl shadow-sm transition-colors ${statusFilter === 'MY_WORK' ? 'bg-indigo-500 text-white' : 'bg-white dark:bg-slate-800 text-indigo-500 border border-[var(--border-color)]'}`}><UserCheck size={20} /></div>
+                  </div>
+
+                  <div onClick={() => setStatusFilter('ATTENTION')} className={`flex items-center justify-between p-4 rounded-xl cursor-pointer transition-all duration-300 border ${statusFilter === 'ATTENTION' ? 'bg-amber-50 dark:bg-amber-500/10 border-amber-300 dark:border-amber-500/50 shadow-md ring-1 ring-amber-500/20 scale-[1.02]' : 'bg-[var(--bg-subtle)] border-[var(--border-color)] hover:border-amber-300 dark:hover:border-amber-600 hover:shadow-md hover:-translate-y-0.5'}`}>
+                    <div>
+                      <div className={`text-[10px] font-black uppercase tracking-widest mb-0.5 ${statusFilter === 'ATTENTION' ? 'text-amber-600 dark:text-amber-400' : 'text-[var(--text-muted)]'}`}>Needs Attention</div>
+                      <div className={`text-2xl font-black tracking-tight ${statusFilter === 'ATTENTION' ? 'text-amber-700 dark:text-amber-300' : 'text-[var(--text-main)]'}`}>{urgentCount}</div>
+                    </div>
+                    <div className={`p-2.5 rounded-xl shadow-sm transition-colors ${statusFilter === 'ATTENTION' ? 'bg-amber-500 text-white' : 'bg-white dark:bg-slate-800 text-amber-500 border border-[var(--border-color)]'}`}><AlertTriangle size={20} /></div>
+                  </div>
+
+                  <div onClick={() => setStatusFilter('ALL')} className={`flex items-center justify-between p-4 rounded-xl cursor-pointer transition-all duration-300 border ${statusFilter === 'ALL' ? 'bg-cyan-50 dark:bg-cyan-500/10 border-cyan-300 dark:border-cyan-500/50 shadow-md ring-1 ring-cyan-500/20 scale-[1.02]' : 'bg-[var(--bg-subtle)] border-[var(--border-color)] hover:border-cyan-300 dark:hover:border-cyan-600 hover:shadow-md hover:-translate-y-0.5'}`}>
+                    <div>
+                      <div className={`text-[10px] font-black uppercase tracking-widest mb-0.5 ${statusFilter === 'ALL' ? 'text-cyan-600 dark:text-cyan-400' : 'text-[var(--text-muted)]'}`}>Est. Revenue</div>
+                      <div className={`text-2xl font-black tracking-tight ${statusFilter === 'ALL' ? 'text-cyan-700 dark:text-cyan-300' : 'text-[var(--text-main)]'}`}>${totalRevenue.toLocaleString()}</div>
+                    </div>
+                    <div className={`p-2.5 rounded-xl shadow-sm transition-colors ${statusFilter === 'ALL' ? 'bg-cyan-500 text-white' : 'bg-white dark:bg-slate-800 text-cyan-500 border border-[var(--border-color)]'}`}><DollarSign size={20} /></div>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* MAIN CONTENT AREA */}
-        <div className="lg:col-span-3">
+        <div className={viewMode === 'list' ? "lg:col-span-3" : "col-span-full"}>
 
-          <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between bg-[var(--bg-surface)] p-3 px-4 rounded-xl border border-[var(--border-color)] shadow-sm gap-4 transition-all">
+          <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between bg-[var(--bg-surface)] p-3 px-4 rounded-xl border border-[var(--border-color)] shadow-sm gap-4 transition-all">
             <div className="flex items-center gap-3 flex-wrap">
 
               <div className="flex items-center gap-1.5 text-[var(--text-muted)] bg-[var(--bg-subtle)] px-2.5 py-1.5 rounded-md shadow-inner border border-[var(--border-color)]">
@@ -392,21 +401,51 @@ export default function Dashboard() {
               )}
             </div>
 
-            <div className="bg-[var(--bg-subtle)] border border-[var(--border-color)] p-1 rounded-lg flex gap-1 shadow-inner">
-              <button
-                onClick={() => setViewMode('list')}
-                className={`flex items-center justify-center p-1.5 px-3 rounded-md transition-all ${viewMode === 'list' ? 'bg-[var(--bg-surface)] text-indigo-600 dark:text-indigo-400 shadow-sm ring-1 ring-black/5 dark:ring-white/5' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
-                title="List View"
-              >
-                <ListIcon size={16} />
-              </button>
-              <button
-                onClick={() => setViewMode('board')}
-                className={`flex items-center justify-center p-1.5 px-3 rounded-md transition-all ${viewMode === 'board' ? 'bg-[var(--bg-surface)] text-indigo-600 dark:text-indigo-400 shadow-sm ring-1 ring-black/5 dark:ring-white/5' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
-                title="Kanban Board View"
-              >
-                <LayoutGrid size={16} />
-              </button>
+            <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+
+              {/* --- KANBAN SPECIFIC FILTERS --- */}
+              {viewMode === 'board' && (
+                <div className="hidden md:flex items-center gap-2 mr-2">
+                  <div className="relative group">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] group-focus-within:text-indigo-500 transition-colors" size={14} />
+                    <input
+                      type="text"
+                      className="input input-sm h-9 w-48 pl-9 bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] shadow-inner border-[var(--border-color)] focus:border-indigo-500 transition-all font-medium text-xs rounded-lg"
+                      placeholder="Search board..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                  </div>
+                  <select
+                    className="select select-sm h-9 bg-[var(--bg-subtle)] border-[var(--border-color)] text-[var(--text-main)] text-[10px] font-black uppercase tracking-widest shadow-inner focus:border-indigo-500 rounded-lg"
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                  >
+                    <option value="ALL">All Tickets</option>
+                    <option value="ACTIVE">Active Workload</option>
+                    <option value="MY_WORK">My Repairs</option>
+                    <option value="ATTENTION">Needs Attention</option>
+                  </select>
+                </div>
+              )}
+
+              {/* VIEW TOGGLES */}
+              <div className="bg-[var(--bg-subtle)] border border-[var(--border-color)] p-1 rounded-lg flex gap-1 shadow-inner flex-none">
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={`flex items-center justify-center p-1.5 px-3 rounded-md transition-all ${viewMode === 'list' ? 'bg-[var(--bg-surface)] text-indigo-600 dark:text-indigo-400 shadow-sm ring-1 ring-black/5 dark:ring-white/5' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
+                  title="List View"
+                >
+                  <ListIcon size={16} />
+                </button>
+                <button
+                  onClick={() => setViewMode('board')}
+                  className={`flex items-center justify-center p-1.5 px-3 rounded-md transition-all ${viewMode === 'board' ? 'bg-[var(--bg-surface)] text-indigo-600 dark:text-indigo-400 shadow-sm ring-1 ring-black/5 dark:ring-white/5' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
+                  title="Kanban Board View"
+                >
+                  <LayoutGrid size={16} />
+                </button>
+              </div>
             </div>
           </div>
 
@@ -415,7 +454,7 @@ export default function Dashboard() {
           ) : (
             <>
               {viewMode === 'board' ? (
-                <div className="overflow-x-auto h-[calc(100vh-250px)]">
+                <div className="overflow-x-auto h-[calc(100vh-250px)] pb-4 custom-scrollbar">
                   <KanbanBoard
                     tickets={filteredTickets}
                     onTicketUpdate={fetchTickets}

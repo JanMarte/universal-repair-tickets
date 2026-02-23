@@ -150,7 +150,6 @@ export default function TicketDetail() {
         }
     };
 
-    // --- DELETE PHOTO LOGIC ---
     const promptDeletePhoto = (imageName, e) => {
         e.stopPropagation();
         setPhotoToDelete(imageName);
@@ -236,12 +235,35 @@ export default function TicketDetail() {
         }
 
         const { data: ticketData } = await supabase.from('tickets').select('*').eq('id', id).single();
+
+        // --- SELF-HEALING DATA FIX FOR OLD TICKETS ---
+        if (ticketData && ticketData.customer_id && (!ticketData.customer_name || !ticketData.phone)) {
+            const { data: customerData } = await supabase
+                .from('customers')
+                .select('full_name, phone')
+                .eq('id', ticketData.customer_id)
+                .maybeSingle();
+
+            if (customerData) {
+                // Fix the local state
+                ticketData.customer_name = ticketData.customer_name || customerData.full_name;
+                ticketData.phone = ticketData.phone || customerData.phone;
+
+                // Silently update the database so it's permanently fixed!
+                supabase.from('tickets')
+                    .update({ customer_name: ticketData.customer_name, phone: ticketData.phone })
+                    .eq('id', id)
+                    .then(); // fire and forget
+            }
+        }
+        // ---------------------------------------------
+
         setTicket(ticketData);
         setEditForm({
-            brand: ticketData.brand,
-            model: ticketData.model,
-            serial_number: ticketData.serial_number,
-            description: ticketData.description
+            brand: ticketData?.brand,
+            model: ticketData?.model,
+            serial_number: ticketData?.serial_number,
+            description: ticketData?.description
         });
 
         const { data: msgData } = await supabase.from('ticket_messages').select('*').eq('ticket_id', id).order('created_at', { ascending: true });
@@ -386,7 +408,7 @@ export default function TicketDetail() {
         }
 
         const { error } = await supabase.from('ticket_messages').insert([{
-            ticket_id: id, message_text: newMessage, is_internal: isInternalNote, senderName: senderName
+            ticket_id: id, message_text: newMessage, is_internal: isInternalNote, sender_name: senderName
         }]);
 
         if (!error) {
@@ -441,13 +463,13 @@ export default function TicketDetail() {
 
     const getStatusColor = (status) => {
         switch (status) {
-            case 'intake': return 'bg-blue-500 text-white shadow-md shadow-blue-500/20';
-            case 'diagnosing': return 'bg-purple-500 text-white shadow-md shadow-purple-500/20';
-            case 'waiting_parts': return 'bg-orange-500 text-white shadow-md shadow-orange-500/20';
-            case 'repairing': return 'bg-amber-500 text-white shadow-md shadow-amber-500/20';
-            case 'ready_pickup': return 'bg-emerald-500 text-white shadow-md shadow-emerald-500/20';
-            case 'completed': return 'bg-slate-500 text-white shadow-md shadow-slate-500/20';
-            default: return 'bg-gray-500 text-white';
+            case 'intake': return 'bg-blue-500 text-white shadow-blue-500/30';
+            case 'diagnosing': return 'bg-purple-500 text-white shadow-purple-500/30';
+            case 'waiting_parts': return 'bg-orange-500 text-white shadow-orange-500/30';
+            case 'repairing': return 'bg-amber-500 text-white shadow-amber-500/30';
+            case 'ready_pickup': return 'bg-emerald-500 text-white shadow-emerald-500/30';
+            case 'completed': return 'bg-slate-500 text-white shadow-slate-500/30';
+            default: return 'bg-indigo-500 text-white shadow-indigo-500/30';
         }
     };
 
@@ -506,7 +528,8 @@ export default function TicketDetail() {
                 {filteredMessages.map((msg) => {
                     const isMe = msg.sender_name === (currentUser?.full_name || currentUser?.email?.split('@')[0] || 'Staff');
                     const isInternal = msg.is_internal;
-                    const initials = msg.sender_name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+                    const senderNameStr = msg.sender_name || 'Unknown';
+                    const initials = senderNameStr.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() || '?';
 
                     return (
                         <div key={msg.id} className={`flex gap-3 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
@@ -515,7 +538,7 @@ export default function TicketDetail() {
                             </div>
                             <div className={`flex flex-col max-w-[80%] ${isMe ? 'items-end' : 'items-start'}`}>
                                 <div className="flex items-center gap-2 mb-1 px-1">
-                                    <span className="text-[10px] font-bold text-[var(--text-muted)] opacity-80">{msg.sender_name}</span>
+                                    <span className="text-[10px] font-bold text-[var(--text-muted)] opacity-80">{senderNameStr}</span>
                                     <span className="text-[9px] text-[var(--text-muted)] opacity-50">{format(new Date(msg.created_at), 'h:mm a')}</span>
                                 </div>
                                 <div className={`px-4 py-2.5 rounded-2xl text-sm font-medium shadow-sm whitespace-pre-wrap leading-relaxed ${isInternal
@@ -590,14 +613,24 @@ export default function TicketDetail() {
     return (
         <div className="min-h-screen p-4 md:p-6 font-sans pb-32 lg:pb-24 transition-colors duration-300">
             {/* NAVBAR */}
-            <div className="navbar rounded-2xl mb-6 sticky top-2 z-40 flex justify-between shadow-sm backdrop-blur-md bg-[var(--bg-surface)] border border-[var(--border-color)] px-3 py-2 animate-fade">
-                <div className="flex items-center">
+            <div className="navbar rounded-2xl mb-6 sticky top-2 z-40 flex justify-between shadow-sm backdrop-blur-md bg-[var(--bg-surface)] border border-[var(--border-color)] px-3 py-2 animate-fade relative">
+
+                <div className="flex items-center z-10">
                     <button onClick={() => navigate(-1)} className="btn btn-sm btn-ghost gap-2 px-3 text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-main)] transition-all rounded-lg group">
                         <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform duration-300" />
                         <span className="hidden md:inline font-bold">Dashboard</span>
                     </button>
                 </div>
-                <div className="flex-none flex items-center gap-1 sm:gap-2">
+
+                {/* --- CENTER BRANDING --- */}
+                <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 hidden lg:flex items-center gap-2 pointer-events-none">
+                    <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
+                        <Wrench size={14} fill="currentColor" />
+                    </div>
+                    <span className="font-black text-[var(--text-main)] text-lg tracking-tight">University <span className="text-indigo-500">Vac & Sew</span></span>
+                </div>
+
+                <div className="flex-none flex items-center gap-1 sm:gap-2 z-10">
                     <button onClick={() => { navigator.clipboard.writeText(ticket.id); addToast('ID copied', 'success'); }} className="hidden sm:flex items-center gap-2 bg-[var(--bg-subtle)] hover:bg-[var(--bg-surface)] px-3 py-1.5 rounded-lg border border-[var(--border-color)] shadow-inner transition-all group cursor-pointer mr-2" title="Click to copy ID">
                         <Hash size={12} className="text-[var(--text-muted)] group-hover:text-indigo-500 transition-colors" />
                         <span className="font-mono text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">ID: {ticket.id}</span>
@@ -608,8 +641,9 @@ export default function TicketDetail() {
             </div>
 
             {/* HEADER CARD */}
-            <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-2xl p-6 md:p-8 shadow-sm mb-6 relative overflow-hidden animate-fade-in-up">
-                <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 opacity-80"></div>
+            <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-2xl p-6 md:p-8 shadow-sm mb-6 relative z-30 animate-fade-in-up">
+                <div className="absolute top-0 left-0 right-0 h-1.5 rounded-t-2xl bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 opacity-80"></div>
+
                 <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
                     <div className="flex-1 min-w-0 w-full">
                         <div className="flex items-center gap-2 mb-3 flex-wrap">
@@ -640,8 +674,15 @@ export default function TicketDetail() {
                         </div>
                         <h1 className="text-3xl md:text-4xl font-black text-[var(--text-main)] tracking-tight mb-3 leading-tight">{ticket.brand} <span className="text-indigo-500">{ticket.model}</span></h1>
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm font-medium text-[var(--text-muted)]">
-                            <div className="flex items-center gap-2"><User size={16} /> {ticket.customer_name}</div>
-                            <div className="flex items-center gap-2"><Phone size={16} /> {formatPhoneNumber(ticket.phone)}</div>
+
+                            {/* FALLBACKS ADDED HERE FOR MISSING CUSTOMER INFO */}
+                            <div className="flex items-center gap-2">
+                                <User size={16} /> {ticket.customer_name || <span className="italic opacity-50 text-[10px] font-black uppercase tracking-widest">No Name Provided</span>}
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <Phone size={16} /> {ticket.phone ? formatPhoneNumber(ticket.phone) : <span className="italic opacity-50 text-[10px] font-black uppercase tracking-widest">No Phone Provided</span>}
+                            </div>
+
                             {isStaff && ticket.customer_id && (
                                 <button onClick={() => navigate(`/customer/${ticket.customer_id}`)} className="flex items-center gap-1 text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 bg-indigo-50 dark:bg-indigo-900/20 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 px-2 py-1 rounded-md transition-all cursor-pointer shadow-sm border border-indigo-100 dark:border-indigo-800">
                                     <History size={14} /> <span className="text-[10px] font-black uppercase tracking-widest mt-0.5">History</span>
@@ -650,43 +691,85 @@ export default function TicketDetail() {
                         </div>
                     </div>
 
-                    <div className="flex flex-col items-stretch w-full lg:w-auto gap-3 flex-none">
+                    {/* --- PREMIUM CONTROL CLUSTER --- */}
+                    <div className="flex flex-col items-stretch w-full lg:w-[400px] gap-4 flex-none">
                         {isStaff ? (
                             <div className="flex flex-col gap-3">
-                                <div className="flex gap-2 w-full lg:w-auto">
-                                    <select
-                                        className={`select select-bordered flex-1 lg:flex-none w-full lg:w-56 h-12 text-sm font-black uppercase tracking-wide border-0 shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-500/50 ${getStatusColor(ticket.status)}`}
-                                        value={ticket.status}
-                                        onChange={(e) => updateStatus(e.target.value)}
-                                        disabled={!canEdit}
-                                    >
-                                        <option value="intake" className="bg-[var(--bg-surface)] text-[var(--text-main)] shadow-none">In Queue</option>
-                                        <option value="diagnosing" className="bg-[var(--bg-surface)] text-[var(--text-main)] shadow-none">Diagnosing</option>
-                                        <option value="waiting_parts" className="bg-[var(--bg-surface)] text-[var(--text-main)] shadow-none">Waiting on Parts</option>
-                                        <option value="repairing" className="bg-[var(--bg-surface)] text-[var(--text-main)] shadow-none">Repairing</option>
-                                        <option value="ready_pickup" className="bg-[var(--bg-surface)] text-[var(--text-main)] shadow-none">Ready for Pickup</option>
-                                        <option value="completed" className="bg-[var(--bg-surface)] text-[var(--text-main)] shadow-none">Completed</option>
-                                    </select>
-                                    <button onClick={handleCopyLink} className="btn btn-square h-12 w-12 border border-[var(--border-color)] bg-[var(--bg-surface)] shadow-sm hover:bg-[var(--bg-subtle)] text-indigo-500 flex-none transition-all" title="Copy Public Link"><Share2 size={20} /></button>
-                                    <div className="dropdown dropdown-end">
-                                        <label tabIndex={0} className="btn btn-square h-12 w-12 border border-[var(--border-color)] bg-[var(--bg-surface)] shadow-sm hover:bg-[var(--bg-subtle)] text-[var(--text-main)] flex-none transition-all"><Printer size={20} /></label>
-                                        <ul tabIndex={0} className="dropdown-content z-[50] menu p-2 shadow-2xl bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl w-52 mt-2 animate-pop">
-                                            <li><a onClick={handlePrintShop} className="flex items-center gap-2 font-bold text-[var(--text-main)] hover:bg-[var(--bg-subtle)] rounded-lg"><Tag size={16} className="text-indigo-500" /> Shop Tag (Device)</a></li>
-                                            <li><a onClick={handlePrintCustomer} className="flex items-center gap-2 font-bold text-[var(--text-main)] hover:bg-[var(--bg-subtle)] rounded-lg"><User size={16} className="text-emerald-500" /> Customer Receipt</a></li>
-                                        </ul>
+
+                                {/* Status & Quick Actions Row */}
+                                <div className="relative z-20">
+                                    <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] mb-1.5 block pl-1">Ticket Status</label>
+                                    <div className="flex gap-2 w-full">
+                                        {/* Status Dropdown */}
+                                        <div className="dropdown dropdown-end flex-1">
+                                            <div tabIndex={0} role="button" className={`btn w-full h-12 border-none shadow-md flex justify-between items-center px-4 transition-all hover:scale-[1.02] ${getStatusColor(ticket.status)} ${!canEdit ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                                                <span className="font-black uppercase tracking-widest text-[11px] truncate mr-2">
+                                                    {ticket.status === 'intake' ? 'In Queue' : ticket.status.replace('_', ' ')}
+                                                </span>
+                                                <ChevronDown size={16} className="opacity-70 flex-none" />
+                                            </div>
+                                            {canEdit && (
+                                                <ul tabIndex={0} className="dropdown-content z-[60] menu p-2 shadow-2xl bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl w-64 mt-2 animate-pop">
+                                                    <li className="menu-title text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] px-2 py-1">Update Status</li>
+                                                    <li><button onClick={(e) => { updateStatus('intake'); e.currentTarget.blur(); }} className="font-bold text-[var(--text-main)] hover:bg-[var(--bg-subtle)] rounded-lg py-2.5"><div className="w-2.5 h-2.5 rounded-full bg-blue-500 mr-2 shadow-sm"></div> In Queue</button></li>
+                                                    <li><button onClick={(e) => { updateStatus('diagnosing'); e.currentTarget.blur(); }} className="font-bold text-[var(--text-main)] hover:bg-[var(--bg-subtle)] rounded-lg py-2.5"><div className="w-2.5 h-2.5 rounded-full bg-purple-500 mr-2 shadow-sm"></div> Diagnosing</button></li>
+                                                    <li><button onClick={(e) => { updateStatus('waiting_parts'); e.currentTarget.blur(); }} className="font-bold text-[var(--text-main)] hover:bg-[var(--bg-subtle)] rounded-lg py-2.5"><div className="w-2.5 h-2.5 rounded-full bg-orange-500 mr-2 shadow-sm"></div> Waiting on Parts</button></li>
+                                                    <li><button onClick={(e) => { updateStatus('repairing'); e.currentTarget.blur(); }} className="font-bold text-[var(--text-main)] hover:bg-[var(--bg-subtle)] rounded-lg py-2.5"><div className="w-2.5 h-2.5 rounded-full bg-amber-500 mr-2 shadow-sm"></div> Repairing</button></li>
+                                                    <li><button onClick={(e) => { updateStatus('ready_pickup'); e.currentTarget.blur(); }} className="font-bold text-[var(--text-main)] hover:bg-[var(--bg-subtle)] rounded-lg py-2.5"><div className="w-2.5 h-2.5 rounded-full bg-emerald-500 mr-2 shadow-sm"></div> Ready for Pickup</button></li>
+                                                    <div className="border-t border-dashed border-[var(--border-color)] my-1"></div>
+                                                    <li><button onClick={(e) => { updateStatus('completed'); e.currentTarget.blur(); }} className="font-bold text-[var(--text-main)] hover:bg-[var(--bg-subtle)] rounded-lg py-2.5"><div className="w-2.5 h-2.5 rounded-full bg-slate-500 mr-2 shadow-sm"></div> Completed</button></li>
+                                                </ul>
+                                            )}
+                                        </div>
+
+                                        {/* Action Buttons */}
+                                        <button onClick={handleCopyLink} className="btn btn-square h-12 w-12 border border-[var(--border-color)] bg-[var(--bg-surface)] shadow-sm hover:bg-[var(--bg-subtle)] text-indigo-500 flex-none transition-all hover:scale-[1.05]" title="Copy Public Link"><Share2 size={18} /></button>
+                                        <div className="dropdown dropdown-end">
+                                            <label tabIndex={0} className="btn btn-square h-12 w-12 border border-[var(--border-color)] bg-[var(--bg-surface)] shadow-sm hover:bg-[var(--bg-subtle)] text-[var(--text-main)] flex-none transition-all hover:scale-[1.05]"><Printer size={18} /></label>
+                                            <ul tabIndex={0} className="dropdown-content z-[50] menu p-2 shadow-2xl bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl w-52 mt-2 animate-pop">
+                                                <li><a onClick={() => { handlePrintShop(); document.activeElement.blur(); }} className="flex items-center gap-2 font-bold text-[var(--text-main)] hover:bg-[var(--bg-subtle)] rounded-lg py-3"><Tag size={16} className="text-indigo-500" /> Shop Tag</a></li>
+                                                <li><a onClick={() => { handlePrintCustomer(); document.activeElement.blur(); }} className="flex items-center gap-2 font-bold text-[var(--text-main)] hover:bg-[var(--bg-subtle)] rounded-lg py-3"><User size={16} className="text-emerald-500" /> Customer Receipt</a></li>
+                                            </ul>
+                                        </div>
                                     </div>
                                 </div>
-                                <div className="form-control w-full lg:w-56">
-                                    <select
-                                        className="select select-bordered w-full h-12 text-[10px] font-black uppercase tracking-widest bg-[var(--bg-subtle)] text-[var(--text-main)] border border-[var(--border-color)] shadow-inner focus:border-indigo-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-                                        value={ticket.assigned_to || ""}
-                                        onChange={(e) => handleAssignment(e.target.value)}
-                                        disabled={!canEdit}
-                                    >
-                                        <option value="" className="bg-[var(--bg-surface)] text-[var(--text-muted)]">-- Unassigned --</option>
-                                        {employees.map(emp => <option key={emp.id} value={emp.id} className="bg-[var(--bg-surface)] text-[var(--text-main)] font-bold">{emp.full_name || emp.email}</option>)}
-                                    </select>
+
+                                {/* Assignee Row */}
+                                <div className="relative z-10">
+                                    <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] mb-1.5 block pl-1">Assigned Technician</label>
+                                    <div className="dropdown dropdown-end w-full">
+                                        <div tabIndex={0} role="button" className={`btn w-full h-12 bg-[var(--bg-subtle)] border border-[var(--border-color)] hover:bg-[var(--bg-surface)] hover:border-indigo-300 shadow-inner flex justify-between items-center px-4 transition-all ${!canEdit ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                                            <div className="flex items-center gap-2 overflow-hidden">
+                                                <User size={14} className={ticket.assigned_to ? "text-indigo-500 flex-none" : "text-[var(--text-muted)] flex-none"} />
+                                                <span className="font-black uppercase tracking-widest text-[10px] text-[var(--text-main)] truncate">
+                                                    {ticket.assigned_to ? (employees.find(e => e.id === ticket.assigned_to)?.full_name || 'Technician Assigned') : 'Click to Assign...'}
+                                                </span>
+                                            </div>
+                                            <ChevronDown size={16} className="text-[var(--text-muted)] flex-none opacity-70" />
+                                        </div>
+                                        {canEdit && (
+                                            <ul tabIndex={0} className="dropdown-content z-[60] menu p-2 shadow-2xl bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl w-full mt-2 animate-pop max-h-64 overflow-y-auto custom-scrollbar">
+                                                <li>
+                                                    <button onClick={(e) => { handleAssignment(""); e.currentTarget.blur(); }} className={`font-bold text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] rounded-lg py-2.5 ${!ticket.assigned_to ? 'bg-[var(--bg-subtle)]' : ''}`}>
+                                                        <div className="w-6 h-6 rounded-full bg-[var(--bg-surface)] border border-[var(--border-color)] flex items-center justify-center mr-2 shadow-inner"><X size={12} /></div> Unassigned
+                                                    </button>
+                                                </li>
+                                                <div className="border-t border-dashed border-[var(--border-color)] my-1"></div>
+                                                {employees.map(emp => (
+                                                    <li key={emp.id}>
+                                                        <button onClick={(e) => { handleAssignment(emp.id); e.currentTarget.blur(); }} className={`font-bold text-[var(--text-main)] hover:bg-[var(--bg-subtle)] rounded-lg py-2.5 ${ticket.assigned_to === emp.id ? 'bg-[var(--bg-subtle)] text-indigo-600 dark:text-indigo-400' : ''}`}>
+                                                            <div className="w-6 h-6 rounded-full bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mr-2 text-[9px] font-black uppercase shadow-sm">
+                                                                {emp.full_name?.substring(0, 2).toUpperCase() || <User size={12} />}
+                                                            </div>
+                                                            {emp.full_name || emp.email}
+                                                        </button>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                    </div>
                                 </div>
+
                             </div>
                         ) : (
                             <div className={`badge h-10 w-full lg:w-auto px-5 font-black uppercase tracking-widest shadow-md ${getStatusColor(ticket.status)}`}>{ticket.status.replace('_', ' ')}</div>
@@ -1080,14 +1163,77 @@ export default function TicketDetail() {
                 </div>
             )}
 
-            <div style={{ display: 'none' }}>
-                <div ref={customerLabelRef} style={{ width: '4in', height: '6in', padding: '20px', fontFamily: 'sans-serif', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', border: '1px solid #ccc' }}>
-                    {/* Print content hidden for brevity but rendered by ReactToPrint */}
+            {/* --- PRINTABLE LABELS (Visually Hidden from UI) --- */}
+            <div className="absolute -left-[9999px] top-0 opacity-0 pointer-events-none">
+
+                {/* 1. CUSTOMER RECEIPT (Standard 4x6 Label Size) */}
+                <div ref={customerLabelRef} className="bg-white text-black p-6 font-sans flex flex-col" style={{ width: '4in', height: '6in', boxSizing: 'border-box' }}>
+                    <div className="text-center mb-4 border-b-2 border-black pb-4">
+                        <h2 className="text-2xl font-black uppercase tracking-widest text-black">Repair Receipt</h2>
+                        <p className="text-base font-bold text-gray-600 mt-1 font-mono">TICKET #{ticket?.id}</p>
+                    </div>
+
+                    <div className="space-y-4 mb-4 flex-1">
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-0.5">Customer</p>
+                            <p className="text-lg font-bold text-black leading-tight">{ticket?.customer_name}</p>
+                            <p className="text-sm font-mono font-medium text-gray-700">{formatPhoneNumber(ticket?.phone || '')}</p>
+                        </div>
+
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-0.5">Device</p>
+                            <p className="text-lg font-bold text-black leading-tight">{ticket?.brand} {ticket?.model}</p>
+                            <p className="text-xs font-mono font-medium text-gray-600 mt-0.5">SN: {ticket?.serial_number || 'N/A'}</p>
+                        </div>
+
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-0.5">Received On</p>
+                            <p className="text-sm font-bold text-black">
+                                {ticket?.created_at ? format(new Date(ticket.created_at), 'MMMM dd, yyyy - h:mm a') : 'N/A'}
+                            </p>
+                        </div>
+
+                        <div className="pt-2">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-0.5">Stated Issue</p>
+                            <p className="text-xs font-medium text-black line-clamp-3">
+                                {ticket?.description || 'No issue provided.'}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="flex flex-col items-center justify-center border-t-2 border-dashed border-gray-400 pt-4 mt-auto">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-gray-600 mb-2">Scan for Live Status Updates</p>
+                        <div className="p-2 border-4 border-black rounded-xl bg-white">
+                            <QRCode value={`${window.location.origin}/status/${ticket?.id}`} size={120} level="H" />
+                        </div>
+                    </div>
                 </div>
-                <div ref={shopLabelRef} style={{ width: '3.5in', height: '1.2in', padding: '5px', fontFamily: 'monospace', display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '1px solid black' }}>
-                    {/* Print content hidden for brevity but rendered by ReactToPrint */}
+
+                {/* 2. SHOP TAG (Standard 3.5x1.2 Barcode/Item Tag) */}
+                <div ref={shopLabelRef} className="bg-white text-black p-2 flex items-center justify-between font-sans border-2 border-black rounded-lg" style={{ width: '3.5in', height: '1.2in', boxSizing: 'border-box' }}>
+                    <div className="flex flex-col justify-center overflow-hidden pr-2 flex-1">
+                        <div className="text-xs font-black uppercase tracking-widest text-black truncate mb-0.5">
+                            {ticket?.customer_name}
+                        </div>
+                        <div className="text-[10px] font-bold text-gray-700 truncate mb-1">
+                            {ticket?.brand} {ticket?.model}
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-black font-mono bg-black text-white px-1.5 py-0.5 rounded">
+                                #{ticket?.id}
+                            </span>
+                            <span className="text-[8px] font-bold text-gray-500 uppercase">
+                                {ticket?.created_at ? format(new Date(ticket.created_at), 'MM/dd/yy') : ''}
+                            </span>
+                        </div>
+                    </div>
+
+                    <div className="flex-none p-1 border-2 border-black rounded-md bg-white">
+                        <QRCode value={`${window.location.origin}/ticket/${ticket?.id}`} size={68} level="M" />
+                    </div>
                 </div>
             </div>
+
         </div>
     );
 }
