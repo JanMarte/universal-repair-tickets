@@ -623,7 +623,11 @@ export default function TicketDetail() {
                 </div>
 
                 {/* --- CENTER BRANDING --- */}
-                <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 hidden lg:flex items-center gap-2 pointer-events-none">
+                <div
+                    onClick={() => navigate(isStaff ? '/' : '/my-tickets')}
+                    className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 hidden lg:flex items-center gap-2 cursor-pointer hover:scale-105 transition-transform z-10"
+                    title="Go to Home"
+                >
                     <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
                         <Wrench size={14} fill="currentColor" />
                     </div>

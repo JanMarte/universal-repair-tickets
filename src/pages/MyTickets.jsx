@@ -26,12 +26,12 @@ export default function MyTickets() {
   async function fetchMyTickets() {
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
-      // 1. Find the customer record with this email
+      // Use maybeSingle() to prevent the 406 Not Acceptable error
       const { data: customer } = await supabase
         .from('customers')
         .select('id')
         .eq('email', user.email)
-        .single();
+        .maybeSingle();
 
       if (customer) {
         const { data: myTickets } = await supabase

@@ -141,8 +141,18 @@ export default function Dashboard() {
       <div className="navbar rounded-2xl mb-6 sticky top-2 z-40 animate-fade flex justify-between shadow-sm backdrop-blur-md bg-[var(--bg-surface)] border border-[var(--border-color)] px-3 py-2">
 
         {/* PREMIUM BRANDING */}
-        <div className="flex-1 min-w-0 flex items-center gap-3">
-          <div className="hidden sm:flex w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl items-center justify-center text-white shadow-lg shadow-indigo-500/20">
+        <div
+          onClick={() => {
+            if (['employee', 'manager', 'admin'].includes(currentUser.role)) {
+              navigate('/');
+            } else {
+              navigate('/my-tickets');
+            }
+          }}
+          className="flex-1 min-w-0 flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity group"
+          title="Go to Home"
+        >
+          <div className="hidden sm:flex w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl items-center justify-center text-white shadow-lg shadow-indigo-500/20 group-hover:scale-105 transition-transform">
             <Wrench size={20} fill="currentColor" />
           </div>
           <div className="flex flex-col justify-center leading-tight">

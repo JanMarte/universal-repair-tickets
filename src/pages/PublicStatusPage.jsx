@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { CheckCircle, Wrench, Package, ArrowRight, MapPin, Phone, Moon, Sun, Wind, Scissors, Zap, AlertCircle, Hash, AlertTriangle, Receipt, Lock } from 'lucide-react';
 import { formatCurrency } from '../utils';
@@ -7,6 +7,7 @@ import confetti from 'canvas-confetti';
 
 export default function PublicStatusPage() {
     const { id } = useParams();
+    const navigate = useNavigate();
     const [ticket, setTicket] = useState(null);
     const [estimateItems, setEstimateItems] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -100,8 +101,14 @@ export default function PublicStatusPage() {
         <div className="min-h-screen bg-[var(--bg-surface)] font-sans transition-colors duration-300 pb-20">
 
             <div className="sticky top-0 z-50 px-6 py-4 flex justify-between items-center shadow-sm backdrop-blur-md bg-[var(--bg-surface)]/80 border-b border-[var(--border-color)] transition-colors">
-                <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-500/20">
+
+                {/* --- CLICKABLE BRANDING LOGO --- */}
+                <div
+                    onClick={() => navigate('/my-tickets')}
+                    className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity group"
+                    title="View My Account"
+                >
+                    <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-500/20 group-hover:scale-105 transition-transform">
                         <Wrench size={20} fill="currentColor" />
                     </div>
                     <div>
@@ -109,6 +116,7 @@ export default function PublicStatusPage() {
                         <p className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] mt-0.5">Live Repair Status</p>
                     </div>
                 </div>
+
                 <button onClick={toggleTheme} className="w-10 h-10 flex items-center justify-center rounded-full bg-[var(--bg-subtle)] border border-[var(--border-color)] shadow-inner text-[var(--text-muted)] hover:text-indigo-500 transition-colors"><Moon size={18} className="dark:hidden" /><Sun size={18} className="hidden dark:block" /></button>
             </div>
 
