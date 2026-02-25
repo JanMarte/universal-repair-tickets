@@ -1,223 +1,177 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
-import { Shield, ShieldAlert, User, Mail, PlusCircle, MoreVertical, X, CheckCircle, Award, Star } from 'lucide-react';
+import { formatCurrency } from '../utils';
+import { CheckCircle, AlertCircle, ArrowRight, Package, Wrench, Lock, Receipt } from 'lucide-react';
 import { useToast } from '../context/ToastProvider';
+import confetti from 'canvas-confetti';
 
-export default function Team() {
-    const [team, setTeam] = useState([]);
+export default function CustomerEstimateView({ ticketId }) {
+    const [ticket, setTicket] = useState(null);
+    const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [currentUser, setCurrentUser] = useState(null);
-    const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+    const [approving, setApproving] = useState(false);
     const { addToast } = useToast();
 
     useEffect(() => {
-        fetchTeamData();
-    }, []);
+        fetchData();
+    }, [ticketId]);
 
-    async function fetchTeamData() {
+    async function fetchData() {
         setLoading(true);
+        const { data: ticketData } = await supabase.from('tickets').select('*').eq('id', ticketId).single();
+        const { data: itemsData } = await supabase.from('estimate_items').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true });
 
-        // Get current user to check permissions
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-            const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-            setCurrentUser(profile);
-        }
-
-        // Fetch all staff members
-        const { data: staff, error } = await supabase
-            .from('profiles')
-            .select('*')
-            .in('role', ['admin', 'manager', 'employee'])
-            .order('role', { ascending: true });
-
-        if (error) {
-            console.error("Error fetching team:", error);
-            addToast("Failed to load team data", "error");
-        } else {
-            // Sort to ensure Admin is first, then Manager, then Employee
-            const sortedStaff = (staff || []).sort((a, b) => {
-                const ranks = { admin: 1, manager: 2, employee: 3 };
-                return ranks[a.role] - ranks[b.role];
-            });
-            setTeam(sortedStaff);
-        }
+        setTicket(ticketData);
+        setItems(itemsData || []);
         setLoading(false);
     }
 
-    const updateRole = async (memberId, newRole) => {
-        if (currentUser?.role !== 'admin') {
-            addToast("Only Administrators can change staff roles.", "error");
-            return;
-        }
+    const handleApprove = async () => {
+        setApproving(true);
+        try {
+            // 1. Lock pending items
+            await supabase.from('estimate_items').update({ is_approved: true }).eq('ticket_id', ticketId).eq('is_approved', false);
 
-        const { error } = await supabase
-            .from('profiles')
-            .update({ role: newRole })
-            .eq('id', memberId);
+            // 2. Update Ticket
+            const { error } = await supabase.from('tickets').update({ status: 'waiting_parts', estimate_status: 'approved' }).eq('id', ticketId);
+            if (error) throw error;
 
-        if (error) {
-            addToast("Failed to update role", "error");
-        } else {
-            addToast("Role updated successfully", "success");
-            setTeam(prev => prev.map(member =>
-                member.id === memberId ? { ...member, role: newRole } : member
-            ));
+            confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 }, colors: ['#6366f1', '#8b5cf6', '#ec4899'] });
+
+            setTicket(prev => ({ ...prev, status: 'waiting_parts', estimate_status: 'approved' }));
+            setItems(prev => prev.map(i => ({ ...i, is_approved: true })));
+            addToast("Repair Approved Successfully!", "success");
+
+            // 3. Log it
+            const { data: { user } } = await supabase.auth.getUser();
+            await supabase.from('audit_logs').insert([{
+                ticket_id: ticketId,
+                actor_name: user?.email || 'Customer',
+                action: 'ESTIMATE APPROVED',
+                details: 'Customer approved the estimate via their secure portal.',
+                metadata: { device: navigator.userAgent }
+            }]);
+        } catch (err) {
+            console.error(err);
+            addToast("Failed to approve estimate.", "error");
+        } finally {
+            setApproving(false);
         }
     };
 
-    const getRoleVisuals = (role) => {
-        switch (role) {
-            case 'admin': return { color: 'text-pink-500', bg: 'bg-pink-500', subBg: 'bg-pink-50 dark:bg-pink-900/20', border: 'border-pink-200 dark:border-pink-800', icon: <Star size={14} /> };
-            case 'manager': return { color: 'text-amber-500', bg: 'bg-amber-500', subBg: 'bg-amber-50 dark:bg-amber-900/20', border: 'border-amber-200 dark:border-amber-800', icon: <Shield size={14} /> };
-            default: return { color: 'text-indigo-500', bg: 'bg-indigo-500', subBg: 'bg-indigo-50 dark:bg-indigo-900/20', border: 'border-indigo-200 dark:border-indigo-800', icon: <User size={14} /> };
-        }
+    if (loading) return <div className="flex justify-center py-10"><span className="loading loading-spinner text-indigo-500"></span></div>;
+    if (!ticket) return null;
+
+    // Math Breakdowns
+    const approvedItems = items.filter(i => i.is_approved === true);
+    const pendingItems = items.filter(i => i.is_approved !== true);
+
+    const taxRate = 0.07;
+    const calcTotal = (itemList) => {
+        const sub = itemList.reduce((sum, i) => sum + (i.part_cost || 0) + (i.labor_cost || 0), 0);
+        return sub + (sub * taxRate);
     };
+
+    if (items.length === 0) {
+        return (
+            <div className="text-center py-16 bg-[var(--bg-subtle)] rounded-2xl border border-[var(--border-color)] shadow-inner">
+                <Receipt size={40} className="mx-auto text-[var(--text-muted)] mb-4 opacity-50" />
+                <h3 className="text-sm font-black uppercase tracking-widest text-[var(--text-main)] mb-2">No Estimate Yet</h3>
+                <p className="text-sm font-medium text-[var(--text-muted)] max-w-xs mx-auto">
+                    Our technicians are currently diagnosing your device. A detailed repair estimate will appear here soon.
+                </p>
+            </div>
+        );
+    }
 
     return (
-        <div className="min-h-screen bg-[var(--bg-subtle)] p-4 md:p-6 font-sans transition-colors duration-300 pb-24">
-            <div className="max-w-6xl mx-auto space-y-6">
+        <div className="space-y-6">
 
-                {/* HEADER */}
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 animate-fade-in-up">
-                    <div>
-                        <h1 className="text-3xl font-black text-[var(--text-main)] tracking-tight flex items-center gap-3">
-                            <ShieldAlert className="text-indigo-600" size={32} />
-                            Team Directory
-                        </h1>
-                        <p className="text-sm font-bold text-[var(--text-muted)] mt-1">
-                            Manage staff access and roles.
-                        </p>
+            {/* --- PREVIOUSLY APPROVED RECEIPT --- */}
+            {approvedItems.length > 0 && (
+                <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-[20px] p-6 shadow-sm relative overflow-hidden">
+                    <div className="flex justify-between items-center border-b-2 border-dashed border-[var(--border-color)] pb-4 mb-4">
+                        <h3 className="text-[10px] font-black uppercase tracking-widest text-[var(--text-main)] flex items-center gap-2">
+                            <Receipt size={16} className="text-emerald-500" /> Approved Bill
+                        </h3>
+                        <span className="bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-md shadow-sm flex items-center gap-1">
+                            <Lock size={10} /> Locked
+                        </span>
                     </div>
-                    {currentUser?.role === 'admin' && (
-                        <button
-                            onClick={() => setIsAddModalOpen(true)}
-                            className="btn btn-gradient text-white shadow-lg shadow-indigo-500/30 border-none gap-2 px-6 hover:scale-105 transition-transform rounded-xl"
-                        >
-                            <PlusCircle size={18} strokeWidth={2.5} /> Provision Staff
-                        </button>
-                    )}
-                </div>
-
-                {/* TEAM GRID */}
-                {loading ? (
-                    <div className="flex justify-center py-20"><span className="loading loading-spinner loading-lg text-indigo-500"></span></div>
-                ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
-                        {team.map((member) => {
-                            const visuals = getRoleVisuals(member.role);
-                            const initials = member.full_name?.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() || member.email?.substring(0, 2).toUpperCase();
-
-                            return (
-                                <div key={member.id} className="bg-[var(--bg-surface)] rounded-2xl border border-[var(--border-color)] shadow-sm hover:shadow-md transition-all group relative overflow-hidden flex flex-col h-full">
-                                    {/* Top Color Bar */}
-                                    <div className={`h-1.5 w-full ${visuals.bg}`}></div>
-
-                                    <div className="p-6 flex-1 flex flex-col">
-                                        <div className="flex justify-between items-start mb-4">
-                                            <div className="w-14 h-14 rounded-2xl bg-[var(--bg-subtle)] border border-[var(--border-color)] shadow-inner flex items-center justify-center text-xl font-black text-[var(--text-main)] group-hover:scale-105 transition-transform">
-                                                {initials}
-                                            </div>
-
-                                            {/* Role Badge & Dropdown */}
-                                            {currentUser?.role === 'admin' && member.id !== currentUser.id ? (
-                                                <div className="dropdown dropdown-end">
-                                                    <div tabIndex={0} role="button" className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-widest cursor-pointer shadow-sm border transition-colors ${visuals.subBg} ${visuals.color} ${visuals.border} hover:bg-[var(--bg-surface)]`}>
-                                                        {visuals.icon} {member.role} <MoreVertical size={10} className="opacity-50 ml-1" />
-                                                    </div>
-                                                    <ul tabIndex={0} className="dropdown-content z-[1] menu p-2 shadow-2xl bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl w-40 mt-2 animate-pop">
-                                                        <li className="menu-title text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] px-2 py-1">Change Role</li>
-                                                        <li><button onClick={() => updateRole(member.id, 'employee')} className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 py-2"><User size={12} /> Employee</button></li>
-                                                        <li><button onClick={() => updateRole(member.id, 'manager')} className="text-[10px] font-bold text-amber-600 dark:text-amber-400 py-2"><Shield size={12} /> Manager</button></li>
-                                                        <li><button onClick={() => updateRole(member.id, 'admin')} className="text-[10px] font-bold text-pink-600 dark:text-pink-400 py-2"><Star size={12} /> Admin</button></li>
-                                                    </ul>
-                                                </div>
-                                            ) : (
-                                                <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-widest shadow-sm border ${visuals.subBg} ${visuals.color} ${visuals.border}`}>
-                                                    {visuals.icon} {member.role}
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        <h3 className="text-lg font-black text-[var(--text-main)] truncate mb-1">
-                                            {member.full_name || 'Pending Name'}
-                                        </h3>
-                                        <div className="flex items-center gap-2 text-xs font-medium text-[var(--text-muted)] mb-6 truncate">
-                                            <Mail size={14} className="opacity-50 flex-none" /> {member.email}
-                                        </div>
-
-                                        {/* Status Recessed Area */}
-                                        <div className="mt-auto bg-[var(--bg-subtle)] p-3 rounded-xl border border-[var(--border-color)] shadow-inner flex justify-between items-center">
-                                            <span className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">Account Status</span>
-                                            <span className="flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-emerald-500">
-                                                <CheckCircle size={12} /> Active
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-                            );
-                        })}
+                    <div className="space-y-3 mb-5">
+                        {approvedItems.map((item, idx) => (
+                            <div key={idx} className="flex justify-between items-start text-sm">
+                                <span className="font-bold text-[var(--text-muted)]">{item.description.replace('(Labor) ', '')}</span>
+                                <span className="font-mono font-bold text-[var(--text-muted)]">{formatCurrency((item.part_cost || 0) + (item.labor_cost || 0))}</span>
+                            </div>
+                        ))}
                     </div>
-                )}
-            </div>
-
-            {/* --- ADD STAFF PROVISIONING MODAL --- */}
-            {isAddModalOpen && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity animate-fade-in" onClick={() => setIsAddModalOpen(false)}></div>
-                    <div className="relative w-full max-w-lg bg-[var(--bg-surface)] rounded-3xl shadow-2xl border border-[var(--border-color)] flex flex-col overflow-hidden animate-pop">
-
-                        <div className="p-6 border-b-2 border-dashed border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-surface)]">
-                            <div>
-                                <h2 className="text-xl font-black text-[var(--text-main)] flex items-center gap-2 tracking-tight">
-                                    <ShieldAlert size={22} className="text-indigo-600" /> Provision Staff Account
-                                </h2>
-                            </div>
-                            <button onClick={() => setIsAddModalOpen(false)} className="btn btn-sm btn-circle btn-ghost text-[var(--text-muted)] hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all">
-                                <X size={20} />
-                            </button>
-                        </div>
-
-                        <div className="p-6 space-y-6 bg-[var(--bg-subtle)]">
-                            <div className="bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-200 dark:border-indigo-800/50 p-4 rounded-2xl shadow-sm text-sm font-medium text-[var(--text-main)] leading-relaxed">
-                                To ensure maximum security and prevent unauthorized sign-ups, frontend account creation is permanently disabled. <br /><br />
-                                <strong className="text-indigo-600 dark:text-indigo-400">Administrators must invite new employees via the backend console.</strong>
-                            </div>
-
-                            <div className="space-y-4">
-                                <div className="flex gap-4">
-                                    <div className="flex-none w-8 h-8 rounded-full bg-[var(--bg-surface)] border border-[var(--border-color)] shadow-sm flex items-center justify-center font-black text-indigo-600">1</div>
-                                    <div>
-                                        <h4 className="font-bold text-[var(--text-main)] mb-1">Open Supabase Dashboard</h4>
-                                        <p className="text-xs text-[var(--text-muted)]">Log into your Supabase project, navigate to <strong>Authentication</strong>, and click the <strong>Users</strong> tab.</p>
-                                    </div>
-                                </div>
-                                <div className="flex gap-4">
-                                    <div className="flex-none w-8 h-8 rounded-full bg-[var(--bg-surface)] border border-[var(--border-color)] shadow-sm flex items-center justify-center font-black text-indigo-600">2</div>
-                                    <div>
-                                        <h4 className="font-bold text-[var(--text-main)] mb-1">Send Invite Email</h4>
-                                        <p className="text-xs text-[var(--text-muted)]">Click the green <strong className="text-emerald-500">Add User</strong> button, select <strong>Invite User</strong>, and type the employee's email address.</p>
-                                    </div>
-                                </div>
-                                <div className="flex gap-4">
-                                    <div className="flex-none w-8 h-8 rounded-full bg-[var(--bg-surface)] border border-[var(--border-color)] shadow-sm flex items-center justify-center font-black text-indigo-600">3</div>
-                                    <div>
-                                        <h4 className="font-bold text-[var(--text-main)] mb-1">Assign Role</h4>
-                                        <p className="text-xs text-[var(--text-muted)]">Once they click the email link and set a password, they will instantly appear on this page as an "Employee". You can then upgrade them to a Manager.</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="p-5 border-t-2 border-dashed border-[var(--border-color)] bg-[var(--bg-surface)] flex justify-end">
-                            <button onClick={() => setIsAddModalOpen(false)} className="btn btn-gradient px-8 text-white font-bold border-none shadow-lg shadow-indigo-500/30 hover:scale-105 transition-transform">
-                                Understood
-                            </button>
-                        </div>
+                    <div className="flex justify-between items-center pt-3 border-t border-[var(--border-color)]">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">Approved Total (w/ Tax)</span>
+                        <span className="text-lg font-black text-[var(--text-main)]">{formatCurrency(calcTotal(approvedItems))}</span>
                     </div>
                 </div>
             )}
 
+            {/* --- ACTION REQUIRED: NEW PENDING ESTIMATE --- */}
+            {pendingItems.length > 0 && ticket.estimate_status === 'sent' && (
+                <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-3xl p-1 shadow-2xl shadow-indigo-500/30 animate-pop transform transition-all">
+                    <div className="bg-[var(--bg-surface)] rounded-[20px] p-6 relative overflow-hidden">
+                        <div className="absolute top-0 right-0 -mr-6 -mt-6 w-32 h-32 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+                        <div className="flex justify-between items-center border-b-2 border-dashed border-[var(--border-color)] pb-4 mb-4 relative z-10">
+                            <h3 className="text-[10px] font-black uppercase tracking-widest text-indigo-500 flex items-center gap-2">
+                                <AlertCircle size={16} /> Action Required
+                            </h3>
+                        </div>
+
+                        <p className="text-xs font-bold text-[var(--text-muted)] mb-4">
+                            The following parts/services are required to complete your repair:
+                        </p>
+
+                        <div className="space-y-3 mb-6 relative z-10">
+                            {pendingItems.map((item, idx) => {
+                                const isLabor = item.description.startsWith('(Labor)');
+                                const cleanDescription = item.description.replace('(Labor) ', '');
+                                return (
+                                    <div key={idx} className="flex justify-between items-start text-sm bg-[var(--bg-subtle)] p-3 rounded-lg border border-[var(--border-color)] shadow-inner">
+                                        <div className="flex items-center gap-2">
+                                            {isLabor ? <Wrench size={14} className="text-amber-500" /> : <Package size={14} className="text-indigo-500" />}
+                                            <span className="font-bold text-[var(--text-main)]">{cleanDescription}</span>
+                                        </div>
+                                        <span className="font-mono font-black text-[var(--text-main)]">
+                                            {formatCurrency((item.part_cost || 0) + (item.labor_cost || 0))}
+                                        </span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        <div className="flex justify-between items-center pt-2 mb-6 border-t border-[var(--border-color)]">
+                            <span className="text-[10px] font-black uppercase tracking-widest text-[var(--text-main)] mt-3">Total Due (w/ Tax)</span>
+                            <span className="text-3xl font-black text-indigo-600 dark:text-indigo-400 tracking-tight mt-3">
+                                {formatCurrency(calcTotal(pendingItems))}
+                            </span>
+                        </div>
+
+                        <button
+                            onClick={handleApprove}
+                            disabled={approving}
+                            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black h-14 rounded-xl flex items-center justify-center gap-3 active:scale-95 transition-all shadow-md shadow-indigo-500/20 text-base border-none relative z-10"
+                        >
+                            {approving ? <span className="loading loading-spinner"></span> : <>Approve Repair <ArrowRight size={20} /></>}
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* If there are pending items but the staff hasn't clicked "Send" yet */}
+            {pendingItems.length > 0 && ticket.estimate_status !== 'sent' && (
+                <div className="text-center py-8 bg-[var(--bg-subtle)] rounded-2xl border border-[var(--border-color)] shadow-inner">
+                    <Wrench size={24} className="mx-auto text-[var(--text-muted)] mb-3 opacity-50" />
+                    <p className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">Technician is drafting an update...</p>
+                </div>
+            )}
         </div>
     );
 }

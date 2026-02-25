@@ -22,7 +22,7 @@ export default function AutoLogout() {
 
   const resetTimer = useCallback(() => {
     lastActivityRef.current = Date.now();
-  }, []);
+  }, []);``
 
   useEffect(() => {
     const events = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart'];
