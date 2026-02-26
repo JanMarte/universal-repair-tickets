@@ -29,6 +29,7 @@ export default function TicketDetail() {
     const [messages, setMessages] = useState([]);
     const [auditLogs, setAuditLogs] = useState([]);
     const [employees, setEmployees] = useState([]);
+    const [shopSettings, setShopSettings] = useState(null); // <-- NEW SETTINGS STATE
     const [loading, setLoading] = useState(true);
     const [estimateRefreshTrigger, setEstimateRefreshTrigger] = useState(0);
     const isLoadedRef = useRef(false);
@@ -236,6 +237,10 @@ export default function TicketDetail() {
 
         const { data: ticketData } = await supabase.from('tickets').select('*').eq('id', id).single();
 
+        // --- FETCH SHOP SETTINGS ---
+        const { data: settingsData } = await supabase.from('shop_settings').select('*').eq('id', 1).single();
+        if (settingsData) setShopSettings(settingsData);
+
         // --- SELF-HEALING DATA FIX FOR OLD TICKETS ---
         if (ticketData && ticketData.customer_id && (!ticketData.customer_name || !ticketData.phone)) {
             const { data: customerData } = await supabase
@@ -245,15 +250,9 @@ export default function TicketDetail() {
                 .maybeSingle();
 
             if (customerData) {
-                // Fix the local state
                 ticketData.customer_name = ticketData.customer_name || customerData.full_name;
                 ticketData.phone = ticketData.phone || customerData.phone;
-
-                // Silently update the database so it's permanently fixed!
-                supabase.from('tickets')
-                    .update({ customer_name: ticketData.customer_name, phone: ticketData.phone })
-                    .eq('id', id)
-                    .then(); // fire and forget
+                supabase.from('tickets').update({ customer_name: ticketData.customer_name, phone: ticketData.phone }).eq('id', id).then();
             }
         }
         // ---------------------------------------------
@@ -482,12 +481,7 @@ export default function TicketDetail() {
         return { bg: 'bg-[var(--bg-subtle)] text-[var(--text-muted)] border border-[var(--border-color)]', icon: <FileText size={14} /> };
     };
 
-    const QUICK_REPLIES = [
-        { label: "Parts Ordered", text: "Update: We have ordered the necessary parts for your repair. We will notify you when they arrive." },
-        { label: "Diagnosing", text: "We have started diagnosing your device. We will update you shortly with an estimate." },
-        { label: "Ready", text: "Great news! Your device is ready for pickup. You can come by during our business hours." },
-        { label: "Delay", text: "We hit a small snag and need a bit more time to ensure the quality of the repair. Thanks for your patience." }
-    ];
+    const QUICK_REPLIES = shopSettings?.quick_replies || [];
 
     const renderChatInterface = () => (
         <div className="flex flex-col h-full bg-[var(--bg-surface)] relative">
@@ -679,7 +673,6 @@ export default function TicketDetail() {
                         <h1 className="text-3xl md:text-4xl font-black text-[var(--text-main)] tracking-tight mb-3 leading-tight">{ticket.brand} <span className="text-indigo-500">{ticket.model}</span></h1>
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm font-medium text-[var(--text-muted)]">
 
-                            {/* FALLBACKS ADDED HERE FOR MISSING CUSTOMER INFO */}
                             <div className="flex items-center gap-2">
                                 <User size={16} /> {ticket.customer_name || <span className="italic opacity-50 text-[10px] font-black uppercase tracking-widest">No Name Provided</span>}
                             </div>
@@ -1173,8 +1166,11 @@ export default function TicketDetail() {
                 {/* 1. CUSTOMER RECEIPT (Standard 4x6 Label Size) */}
                 <div ref={customerLabelRef} className="bg-white text-black p-6 font-sans flex flex-col" style={{ width: '4in', height: '6in', boxSizing: 'border-box' }}>
                     <div className="text-center mb-4 border-b-2 border-black pb-4">
-                        <h2 className="text-2xl font-black uppercase tracking-widest text-black">Repair Receipt</h2>
-                        <p className="text-base font-bold text-gray-600 mt-1 font-mono">TICKET #{ticket?.id}</p>
+                        {/* --- DYNAMIC SHOP IDENTITY --- */}
+                        <h2 className="text-2xl font-black uppercase tracking-widest text-black">{shopSettings?.shop_name || 'Repair Receipt'}</h2>
+                        <p className="text-xs font-bold text-gray-600 mt-1">{shopSettings?.shop_address}</p>
+                        <p className="text-xs font-bold text-gray-600">{shopSettings?.shop_phone} • {shopSettings?.business_hours}</p>
+                        <p className="text-base font-bold text-gray-600 mt-3 font-mono">TICKET #{ticket?.id}</p>
                     </div>
 
                     <div className="space-y-4 mb-4 flex-1">
@@ -1206,9 +1202,11 @@ export default function TicketDetail() {
                     </div>
 
                     <div className="flex flex-col items-center justify-center border-t-2 border-dashed border-gray-400 pt-4 mt-auto">
+                        {/* --- DYNAMIC LEGAL DISCLAIMER --- */}
+                        <p className="text-[8px] text-gray-500 text-center mb-2 leading-tight px-4">{shopSettings?.receipt_disclaimer || 'Thank you for your business.'}</p>
                         <p className="text-[10px] font-black uppercase tracking-widest text-gray-600 mb-2">Scan for Live Status Updates</p>
                         <div className="p-2 border-4 border-black rounded-xl bg-white">
-                            <QRCode value={`${window.location.origin}/status/${ticket?.id}`} size={120} level="H" />
+                            <QRCode value={`${window.location.origin}/status/${ticket?.id}`} size={100} level="H" />
                         </div>
                     </div>
                 </div>
@@ -1229,6 +1227,10 @@ export default function TicketDetail() {
                             <span className="text-[8px] font-bold text-gray-500 uppercase">
                                 {ticket?.created_at ? format(new Date(ticket.created_at), 'MM/dd/yy') : ''}
                             </span>
+                        </div>
+                        {/* --- DYNAMIC SHOP NAME ON TAG --- */}
+                        <div className="text-[8px] font-bold text-gray-400 uppercase mt-1 truncate">
+                            {shopSettings?.shop_name}
                         </div>
                     </div>
 

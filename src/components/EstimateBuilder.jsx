@@ -6,36 +6,61 @@ import { formatCurrency } from '../utils';
 
 export default function EstimateBuilder({ ticketId, onTotalChange, onActivityLog, refreshTrigger, estimateStatus, onUpdateStatus }) {
     const [items, setItems] = useState([]);
+    const [shopSettings, setShopSettings] = useState(null); // <-- NEW STATE
     const [loading, setLoading] = useState(true);
     const [newItem, setNewItem] = useState({ type: 'part', description: '', quantity: 1, unit_price: '' });
     const { addToast } = useToast();
 
     useEffect(() => {
-        fetchItems();
+        fetchData();
     }, [ticketId, refreshTrigger]);
 
-    async function fetchItems() {
+    async function fetchData() {
         setLoading(true);
-        const { data, error } = await supabase
-            .from('estimate_items')
-            .select('*')
-            .eq('ticket_id', ticketId)
-            .order('created_at', { ascending: true });
 
-        if (error) {
-            console.error("Error fetching estimate items:", error);
+        // Fetch items and shop settings simultaneously
+        const [itemsResponse, settingsResponse] = await Promise.all([
+            supabase.from('estimate_items').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true }),
+            supabase.from('shop_settings').select('*').eq('id', 1).single()
+        ]);
+
+        if (settingsResponse.data) {
+            setShopSettings(settingsResponse.data);
+        }
+
+        if (itemsResponse.error) {
+            console.error("Error fetching estimate items:", itemsResponse.error);
         } else {
-            setItems(data || []);
-            calculateAndEmitTotal(data || []);
+            setItems(itemsResponse.data || []);
+            // Pass the dynamic tax rate to the calculation
+            calculateAndEmitTotal(itemsResponse.data || [], settingsResponse.data?.tax_rate || 0.07);
         }
         setLoading(false);
     }
 
-    const calculateAndEmitTotal = (currentItems) => {
+    const calculateAndEmitTotal = (currentItems, currentTaxRate = 0.07) => {
         const subtotal = currentItems.reduce((sum, item) => sum + (item.part_cost || 0) + (item.labor_cost || 0), 0);
-        const taxRate = 0.07;
-        const grandTotal = subtotal + (subtotal * taxRate);
+        const grandTotal = subtotal + (subtotal * currentTaxRate);
         onTotalChange(grandTotal);
+    };
+
+    // SMART TOGGLE: Auto-fills labor rate from settings!
+    const handleTypeToggle = (type) => {
+        if (type === 'labor') {
+            setNewItem({
+                ...newItem,
+                type: 'labor',
+                description: newItem.description || 'Labor', // Default text if empty
+                unit_price: shopSettings?.default_labor_rate?.toString() || '' // Pull from DB
+            });
+        } else {
+            setNewItem({
+                ...newItem,
+                type: 'part',
+                description: newItem.description === 'Labor' ? '' : newItem.description,
+                unit_price: ''
+            });
+        }
     };
 
     const handleAddItem = async (e) => {
@@ -45,9 +70,9 @@ export default function EstimateBuilder({ ticketId, onTotalChange, onActivityLog
         const price = parseFloat(newItem.unit_price);
         const qty = parseInt(newItem.quantity) || 1;
         const totalLineCost = price * qty;
-        
+
         const isLabor = newItem.type === 'labor';
-        
+
         let finalDescription = newItem.description;
         if (qty > 1) finalDescription = `${qty}x ${finalDescription}`;
         if (isLabor) finalDescription = `(Labor) ${finalDescription}`;
@@ -69,9 +94,10 @@ export default function EstimateBuilder({ ticketId, onTotalChange, onActivityLog
         } else {
             const updatedItems = [...items, data[0]];
             setItems(updatedItems);
-            calculateAndEmitTotal(updatedItems);
-            
-            setNewItem({ ...newItem, description: '', quantity: 1, unit_price: '' });
+            calculateAndEmitTotal(updatedItems, shopSettings?.tax_rate || 0.07);
+
+            // Reset form but keep type
+            setNewItem({ type: newItem.type, description: '', quantity: 1, unit_price: newItem.type === 'labor' ? shopSettings?.default_labor_rate || '' : '' });
             addToast("Item added to estimate", "success");
             onActivityLog('ESTIMATE ITEM ADDED', `Added ${finalDescription} ($${totalLineCost})`);
         }
@@ -84,7 +110,7 @@ export default function EstimateBuilder({ ticketId, onTotalChange, onActivityLog
         } else {
             const updatedItems = items.filter(i => i.id !== itemId);
             setItems(updatedItems);
-            calculateAndEmitTotal(updatedItems);
+            calculateAndEmitTotal(updatedItems, shopSettings?.tax_rate || 0.07);
             onActivityLog('ESTIMATE ITEM REMOVED', `Removed ${description} from estimate`);
         }
     };
@@ -107,14 +133,16 @@ export default function EstimateBuilder({ ticketId, onTotalChange, onActivityLog
     // Math Breakdowns
     const approvedItems = items.filter(i => i.is_approved === true);
     const pendingItems = items.filter(i => i.is_approved !== true);
-    
+
     const approvedSubtotal = approvedItems.reduce((sum, item) => sum + (item.part_cost || 0) + (item.labor_cost || 0), 0);
     const pendingSubtotal = pendingItems.reduce((sum, item) => sum + (item.part_cost || 0) + (item.labor_cost || 0), 0);
-    const taxRate = 0.07; 
+
+    // Use Dynamic Tax Rate
+    const taxRate = shopSettings?.tax_rate !== undefined ? shopSettings.tax_rate : 0.07;
 
     return (
         <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-2xl shadow-sm overflow-hidden flex flex-col relative group transition-all">
-            
+
             {/* Header */}
             <div className="p-5 border-b-2 border-dashed border-[var(--border-color)] bg-[var(--bg-surface)] flex justify-between items-center z-10 relative">
                 <h3 className="text-[10px] font-black uppercase text-[var(--text-main)] tracking-widest flex items-center gap-2">
@@ -125,12 +153,12 @@ export default function EstimateBuilder({ ticketId, onTotalChange, onActivityLog
                     {estimateStatus === 'declined' && <span className="bg-red-500 text-white text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded shadow-sm shadow-red-500/30 flex items-center gap-1"><XCircle size={10} /> Declined</span>}
                     {estimateStatus === 'sent' && <span className="bg-amber-500 text-white text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded shadow-sm shadow-amber-500/30 flex items-center gap-1"><AlertCircle size={10} /> Pending Approval</span>}
                     {(!estimateStatus || estimateStatus === 'draft') && <span className="bg-[var(--bg-subtle)] border border-[var(--border-color)] text-[var(--text-muted)] text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded shadow-inner">Draft Mode</span>}
-                    
+
                     {/* UNDO / RESET BUTTON */}
                     {estimateStatus && estimateStatus !== 'draft' && (
-                        <button 
-                            onClick={handleResetToDraft} 
-                            className="btn btn-xs btn-ghost px-2 gap-1 text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-all border border-transparent hover:border-amber-200 dark:hover:border-amber-800 rounded-md" 
+                        <button
+                            onClick={handleResetToDraft}
+                            className="btn btn-xs btn-ghost px-2 gap-1 text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-all border border-transparent hover:border-amber-200 dark:hover:border-amber-800 rounded-md"
                             title="Unlock to add more items"
                         >
                             <RotateCcw size={10} /> Add Items
@@ -141,15 +169,15 @@ export default function EstimateBuilder({ ticketId, onTotalChange, onActivityLog
 
             {/* Content Area */}
             <div className="p-5 bg-[var(--bg-subtle)] flex-1 relative z-10">
-                
+
                 {/* Manual Add Item Form (Only shows if Draft/Unlocked) */}
                 {(!estimateStatus || estimateStatus === 'draft') && (
                     <form onSubmit={handleAddItem} className="mb-6 p-4 bg-[var(--bg-surface)] rounded-xl border border-[var(--border-color)] shadow-sm">
                         <div className="flex bg-[var(--bg-subtle)] p-1 rounded-lg shadow-inner border border-[var(--border-color)] mb-4">
-                            <button type="button" onClick={() => setNewItem({...newItem, type: 'part'})} className={`flex-1 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-md transition-all flex items-center justify-center gap-1.5 ${newItem.type === 'part' ? 'bg-[var(--bg-surface)] text-indigo-600 shadow-sm ring-1 ring-black/5 dark:ring-white/5' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>
+                            <button type="button" onClick={() => handleTypeToggle('part')} className={`flex-1 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-md transition-all flex items-center justify-center gap-1.5 ${newItem.type === 'part' ? 'bg-[var(--bg-surface)] text-indigo-600 shadow-sm ring-1 ring-black/5 dark:ring-white/5' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>
                                 <Package size={12} /> Part / Item
                             </button>
-                            <button type="button" onClick={() => setNewItem({...newItem, type: 'labor'})} className={`flex-1 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-md transition-all flex items-center justify-center gap-1.5 ${newItem.type === 'labor' ? 'bg-[var(--bg-surface)] text-amber-600 shadow-sm ring-1 ring-black/5 dark:ring-white/5' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>
+                            <button type="button" onClick={() => handleTypeToggle('labor')} className={`flex-1 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-md transition-all flex items-center justify-center gap-1.5 ${newItem.type === 'labor' ? 'bg-[var(--bg-surface)] text-amber-600 shadow-sm ring-1 ring-black/5 dark:ring-white/5' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>
                                 <Wrench size={12} /> Labor / Service
                             </button>
                         </div>
@@ -160,10 +188,10 @@ export default function EstimateBuilder({ ticketId, onTotalChange, onActivityLog
                             </div>
                             <div className="w-full sm:w-20">
                                 <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] mb-1 pl-1 block">{newItem.type === 'labor' ? 'Hours' : 'Qty'}</label>
-                                <input type="number" min="1" className="input input-sm w-full h-10 bg-[var(--bg-subtle)] border-[var(--border-color)] text-[var(--text-main)] shadow-inner focus:border-indigo-500 font-bold text-center" value={newItem.quantity} onChange={e => setNewItem({ ...newItem, quantity: e.target.value })} required />
+                                <input type="number" min="1" step="0.5" className="input input-sm w-full h-10 bg-[var(--bg-subtle)] border-[var(--border-color)] text-[var(--text-main)] shadow-inner focus:border-indigo-500 font-bold text-center" value={newItem.quantity} onChange={e => setNewItem({ ...newItem, quantity: e.target.value })} required />
                             </div>
                             <div className="w-full sm:w-28 relative">
-                                <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] mb-1 pl-1 block">{newItem.type === 'labor' ? 'Rate' : 'Price'}</label>
+                                <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] mb-1 pl-1 block">{newItem.type === 'labor' ? 'Rate/Hr' : 'Price'}</label>
                                 <div className="relative">
                                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] font-bold">$</span>
                                     <input type="number" step="0.01" min="0" placeholder="0.00" className="input input-sm w-full h-10 pl-7 bg-[var(--bg-subtle)] border-[var(--border-color)] text-[var(--text-main)] shadow-inner focus:border-indigo-500 font-mono font-bold" value={newItem.unit_price} onChange={e => setNewItem({ ...newItem, unit_price: e.target.value })} required />
@@ -209,7 +237,7 @@ export default function EstimateBuilder({ ticketId, onTotalChange, onActivityLog
                                                 <div className="flex items-center gap-2">
                                                     {isLabor ? <Wrench size={14} className="text-amber-500 flex-none" /> : <Package size={14} className="text-indigo-500 flex-none" />}
                                                     <span className={`font-bold ${isApproved ? 'text-[var(--text-muted)]' : 'text-[var(--text-main)]'}`}>{cleanDescription}</span>
-                                                    {isApproved && <span className="flex items-center gap-1 text-[8px] font-black uppercase tracking-widest bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400 px-1.5 py-0.5 rounded"><Lock size={8}/> Locked</span>}
+                                                    {isApproved && <span className="flex items-center gap-1 text-[8px] font-black uppercase tracking-widest bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400 px-1.5 py-0.5 rounded"><Lock size={8} /> Locked</span>}
                                                 </div>
                                             </td>
                                             <td className={`p-3 text-right font-mono font-black ${isApproved ? 'text-[var(--text-muted)]' : 'text-[var(--text-main)]'}`}>{formatCurrency(itemTotal)}</td>
@@ -231,13 +259,13 @@ export default function EstimateBuilder({ ticketId, onTotalChange, onActivityLog
                     <div className="bg-[var(--bg-surface)] p-4 rounded-xl border border-[var(--border-color)] shadow-sm space-y-2">
                         {approvedItems.length > 0 && (
                             <div className="flex justify-between items-center text-xs text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-900/10 p-2 rounded-lg border border-emerald-100 dark:border-emerald-800/50">
-                                <span>Previously Approved (w/ Tax)</span>
+                                <span>Previously Approved (Inc. {(taxRate * 100).toFixed(1)}% Tax)</span>
                                 <span className="font-mono">{formatCurrency(approvedSubtotal + (approvedSubtotal * taxRate))}</span>
                             </div>
                         )}
                         {pendingItems.length > 0 && (
                             <div className="flex justify-between items-center text-xs text-indigo-600 dark:text-indigo-400 font-bold bg-indigo-50 dark:bg-indigo-900/10 p-2 rounded-lg border border-indigo-100 dark:border-indigo-800/50">
-                                <span>New Pending Charges (w/ Tax)</span>
+                                <span>New Pending Charges (Inc. {(taxRate * 100).toFixed(1)}% Tax)</span>
                                 <span className="font-mono">{formatCurrency(pendingSubtotal + (pendingSubtotal * taxRate))}</span>
                             </div>
                         )}

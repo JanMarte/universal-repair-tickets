@@ -8,6 +8,7 @@ import confetti from 'canvas-confetti';
 export default function CustomerEstimateView({ ticketId }) {
     const [ticket, setTicket] = useState(null);
     const [items, setItems] = useState([]);
+    const [shopSettings, setShopSettings] = useState(null); // <-- NEW STATE
     const [loading, setLoading] = useState(true);
     const [approving, setApproving] = useState(false);
     const { addToast } = useToast();
@@ -18,21 +19,25 @@ export default function CustomerEstimateView({ ticketId }) {
 
     async function fetchData() {
         setLoading(true);
+
+        // Fetch Ticket & Items
         const { data: ticketData } = await supabase.from('tickets').select('*').eq('id', ticketId).single();
         const { data: itemsData } = await supabase.from('estimate_items').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true });
 
+        // Fetch Shop Settings for Tax Rate
+        const { data: settingsData } = await supabase.from('shop_settings').select('*').eq('id', 1).single();
+
         setTicket(ticketData);
         setItems(itemsData || []);
+        setShopSettings(settingsData);
         setLoading(false);
     }
 
     const handleApprove = async () => {
         setApproving(true);
         try {
-            // 1. Lock pending items
             await supabase.from('estimate_items').update({ is_approved: true }).eq('ticket_id', ticketId).eq('is_approved', false);
 
-            // 2. Update Ticket
             const { error } = await supabase.from('tickets').update({ status: 'waiting_parts', estimate_status: 'approved' }).eq('id', ticketId);
             if (error) throw error;
 
@@ -42,7 +47,6 @@ export default function CustomerEstimateView({ ticketId }) {
             setItems(prev => prev.map(i => ({ ...i, is_approved: true })));
             addToast("Repair Approved Successfully!", "success");
 
-            // 3. Log it
             const { data: { user } } = await supabase.auth.getUser();
             await supabase.from('audit_logs').insert([{
                 ticket_id: ticketId,
@@ -62,11 +66,12 @@ export default function CustomerEstimateView({ ticketId }) {
     if (loading) return <div className="flex justify-center py-10"><span className="loading loading-spinner text-indigo-500"></span></div>;
     if (!ticket) return null;
 
-    // Math Breakdowns
     const approvedItems = items.filter(i => i.is_approved === true);
     const pendingItems = items.filter(i => i.is_approved !== true);
 
-    const taxRate = 0.07;
+    // --- DYNAMIC TAX CALCULATION ---
+    const taxRate = shopSettings?.tax_rate || 0.07; // Default to 7% if missing
+
     const calcTotal = (itemList) => {
         const sub = itemList.reduce((sum, i) => sum + (i.part_cost || 0) + (i.labor_cost || 0), 0);
         return sub + (sub * taxRate);
@@ -87,7 +92,7 @@ export default function CustomerEstimateView({ ticketId }) {
     return (
         <div className="space-y-6">
 
-            {/* --- PREVIOUSLY APPROVED RECEIPT --- */}
+            {/* PREVIOUSLY APPROVED RECEIPT */}
             {approvedItems.length > 0 && (
                 <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-[20px] p-6 shadow-sm relative overflow-hidden">
                     <div className="flex justify-between items-center border-b-2 border-dashed border-[var(--border-color)] pb-4 mb-4">
@@ -106,14 +111,25 @@ export default function CustomerEstimateView({ ticketId }) {
                             </div>
                         ))}
                     </div>
-                    <div className="flex justify-between items-center pt-3 border-t border-[var(--border-color)]">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">Approved Total (w/ Tax)</span>
-                        <span className="text-lg font-black text-[var(--text-main)]">{formatCurrency(calcTotal(approvedItems))}</span>
+
+                    {/* SHOW TAX RATE ON RECEIPT */}
+                    <div className="flex justify-between items-center pt-3 mt-3 border-t border-[var(--border-color)]">
+                        <span className="text-[10px] font-bold text-[var(--text-muted)]">Subtotal</span>
+                        <span className="text-xs font-bold text-[var(--text-main)]">{formatCurrency(approvedItems.reduce((sum, i) => sum + (i.part_cost || 0) + (i.labor_cost || 0), 0))}</span>
+                    </div>
+                    <div className="flex justify-between items-center mt-1">
+                        <span className="text-[10px] font-bold text-[var(--text-muted)]">Tax ({(taxRate * 100).toFixed(1)}%)</span>
+                        <span className="text-xs font-bold text-[var(--text-main)]">{formatCurrency(approvedItems.reduce((sum, i) => sum + (i.part_cost || 0) + (i.labor_cost || 0), 0) * taxRate)}</span>
+                    </div>
+
+                    <div className="flex justify-between items-center pt-3 mt-3 border-t border-[var(--border-color)]">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-[var(--text-main)]">Total Due</span>
+                        <span className="text-lg font-black text-emerald-600 dark:text-emerald-400">{formatCurrency(calcTotal(approvedItems))}</span>
                     </div>
                 </div>
             )}
 
-            {/* --- ACTION REQUIRED: NEW PENDING ESTIMATE --- */}
+            {/* ACTION REQUIRED: NEW PENDING ESTIMATE */}
             {pendingItems.length > 0 && ticket.estimate_status === 'sent' && (
                 <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-3xl p-1 shadow-2xl shadow-indigo-500/30 animate-pop transform transition-all">
                     <div className="bg-[var(--bg-surface)] rounded-[20px] p-6 relative overflow-hidden">
@@ -147,8 +163,18 @@ export default function CustomerEstimateView({ ticketId }) {
                             })}
                         </div>
 
+                        {/* TAX BREAKDOWN ON ESTIMATE */}
+                        <div className="flex justify-between items-center pt-2 mt-2 border-t border-[var(--border-color)]">
+                            <span className="text-[10px] font-bold text-[var(--text-muted)]">Subtotal</span>
+                            <span className="text-xs font-bold text-[var(--text-main)]">{formatCurrency(pendingItems.reduce((sum, i) => sum + (i.part_cost || 0) + (i.labor_cost || 0), 0))}</span>
+                        </div>
+                        <div className="flex justify-between items-center mt-1">
+                            <span className="text-[10px] font-bold text-[var(--text-muted)]">Estimated Tax ({(taxRate * 100).toFixed(1)}%)</span>
+                            <span className="text-xs font-bold text-[var(--text-main)]">{formatCurrency(pendingItems.reduce((sum, i) => sum + (i.part_cost || 0) + (i.labor_cost || 0), 0) * taxRate)}</span>
+                        </div>
+
                         <div className="flex justify-between items-center pt-2 mb-6 border-t border-[var(--border-color)]">
-                            <span className="text-[10px] font-black uppercase tracking-widest text-[var(--text-main)] mt-3">Total Due (w/ Tax)</span>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-[var(--text-main)] mt-3">Total Due</span>
                             <span className="text-3xl font-black text-indigo-600 dark:text-indigo-400 tracking-tight mt-3">
                                 {formatCurrency(calcTotal(pendingItems))}
                             </span>
@@ -165,7 +191,6 @@ export default function CustomerEstimateView({ ticketId }) {
                 </div>
             )}
 
-            {/* If there are pending items but the staff hasn't clicked "Send" yet */}
             {pendingItems.length > 0 && ticket.estimate_status !== 'sent' && (
                 <div className="text-center py-8 bg-[var(--bg-subtle)] rounded-2xl border border-[var(--border-color)] shadow-inner">
                     <Wrench size={24} className="mx-auto text-[var(--text-muted)] mb-3 opacity-50" />

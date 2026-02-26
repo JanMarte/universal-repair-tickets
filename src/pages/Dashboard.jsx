@@ -7,7 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Search, Filter, Moon, Sun, Plus, XCircle, LogOut, Users, QrCode,
   AlertTriangle, DollarSign, Activity, ChevronDown, ChevronUp, Layers, UserCheck,
-  Package, LayoutGrid, List as ListIcon, Wrench
+  Package, LayoutGrid, List as ListIcon, Wrench, Settings as SettingsIcon // <--- Added SettingsIcon
 } from 'lucide-react';
 import { useToast } from '../context/ToastProvider';
 import QRScanner from '../components/QRScanner';
@@ -227,6 +227,13 @@ export default function Dashboard() {
                   </button>
                 </li>
               )}
+
+              {/* Settings Action */}
+              <li>
+                <button onClick={() => navigate('/settings')} className="font-bold text-[var(--text-muted)] hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 py-2.5 rounded-lg transition-all">
+                  <SettingsIcon size={16} className="text-indigo-500" /> Settings
+                </button>
+              </li>
 
               {/* Dashed Divider */}
               <div className="border-t-2 border-dashed border-[var(--border-color)] my-2 mx-1"></div>
