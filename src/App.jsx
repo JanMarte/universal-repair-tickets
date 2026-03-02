@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
+import UpdatePassword from './pages/UpdatePassword';
 import { ToastProvider } from './context/ToastProvider';
 import PrintLabel from './pages/PrintLabel';
 
@@ -105,6 +106,7 @@ function App() {
           <Route path="/customer/:id" element={session && isStaff ? <CustomerHistory /> : <Navigate to="/" />} />
           <Route path="/customers" element={session && isStaff ? <Customers /> : <Navigate to="/" />} />
           <Route path="/team" element={session && isManagement ? <Team /> : <Navigate to="/" />} />
+          <Route path="/update-password" element={<UpdatePassword />} />
 
           {/* --- NEW SETTINGS ROUTE (Available to all staff) --- */}
           <Route path="/settings" element={session && isStaff ? <Settings /> : <Navigate to="/" />} />

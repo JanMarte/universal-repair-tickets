@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
-import { Mail, Lock, ArrowRight, Wrench, ShieldAlert, Power, LogOut, Loader2, ShieldCheck, Moon, Sun, User, Package, AlertTriangle } from 'lucide-react';
+import { Mail, Lock, ArrowRight, Wrench, ShieldAlert, Power, Loader2, ShieldCheck, Moon, Sun, User, Package, AlertTriangle, KeyRound } from 'lucide-react';
 import { useToast } from '../context/ToastProvider';
 import { Turnstile } from '@marsidev/react-turnstile';
 
@@ -9,6 +9,7 @@ export default function Login() {
     // UI Modes
     const [portalMode, setPortalMode] = useState(localStorage.getItem('univac_last_portal_mode') || 'customer');
     const [isSignUp, setIsSignUp] = useState(false);
+    const [isForgotPassword, setIsForgotPassword] = useState(false); // <-- NEW STATE
 
     // Auth State
     const [email, setEmail] = useState('');
@@ -30,7 +31,7 @@ export default function Login() {
     const { addToast } = useToast();
     const clickCountRef = useRef(0);
     const clickTimeoutRef = useRef(null);
-    const turnstileRef = useRef(null); // <-- NEW: Ref for resetting the CAPTCHA
+    const turnstileRef = useRef(null); 
 
     const isLocked = !captchaToken || isLockedOut;
 
@@ -71,7 +72,6 @@ export default function Login() {
         let currentStrikes = parseInt(localStorage.getItem(strikeKey) || '0') + 1;
         localStorage.setItem(strikeKey, currentStrikes.toString());
 
-        // FIX: Reset Turnstile so they can try again with a fresh token
         if (turnstileRef.current) turnstileRef.current.reset();
         setCaptchaToken(null);
 
@@ -85,10 +85,8 @@ export default function Login() {
         }
     };
 
-    // --- SECRET ADMIN OVERRIDE ---
     const handleSecretOverride = () => {
         clickCountRef.current += 1;
-
         if (clickCountRef.current >= 5) {
             localStorage.removeItem('univac_lock_staff');
             localStorage.removeItem('univac_lock_customer');
@@ -97,19 +95,16 @@ export default function Login() {
             setIsLockedOut(false);
             setLockoutTimeRemaining(0);
             addToast('Admin Override Activated: Security locks cleared.', 'success');
-
             clickCountRef.current = 0;
             if (clickTimeoutRef.current) clearTimeout(clickTimeoutRef.current);
             return;
         }
-
         if (clickTimeoutRef.current) clearTimeout(clickTimeoutRef.current);
         clickTimeoutRef.current = setTimeout(() => {
             clickCountRef.current = 0;
         }, 1000);
     };
 
-    // --- Auto-redirect if already logged in ---
     useEffect(() => {
         if (!loading) {
             supabase.auth.getSession().then(({ data: { session } }) => {
@@ -118,7 +113,6 @@ export default function Login() {
         }
     }, [navigate, loading]);
 
-    // --- ON MOUNT: Check for Auto-Logout Flag ---
     useEffect(() => {
         const checkReason = setTimeout(() => {
             const wasAutoLoggedOut = localStorage.getItem('session_expired');
@@ -134,7 +128,6 @@ export default function Login() {
         setShowExpiredModal(false);
     };
 
-    // --- THEME MANAGEMENT ---
     useEffect(() => {
         document.documentElement.setAttribute('data-theme', theme);
         if (theme === 'dark') document.documentElement.classList.add('dark');
@@ -159,43 +152,52 @@ export default function Login() {
         setLoading(true);
 
         try {
+            // --- NEW: FORGOT PASSWORD FLOW ---
+            if (isForgotPassword) {
+                const { error } = await supabase.auth.resetPasswordForEmail(email, {
+                    redirectTo: `${window.location.origin}/update-password`, // This routes to our new page!
+                    captchaToken: captchaToken
+                });
+                if (error) {
+                    registerFailedAttempt(error.message);
+                } else {
+                    addToast("Password reset link sent! Please check your email.", "success");
+                    setIsForgotPassword(false);
+                    if (turnstileRef.current) turnstileRef.current.reset();
+                    setCaptchaToken(null);
+                }
+                setLoading(false);
+                return;
+            }
+
+            // --- SIGN UP FLOW ---
             if (isSignUp && portalMode === 'customer') {
                 const { error } = await supabase.auth.signUp({
                     email,
                     password,
-                    options: {
-                        data: { full_name: fullName },
-                        captchaToken: captchaToken
-                    }
+                    options: { data: { full_name: fullName }, captchaToken: captchaToken }
                 });
                 if (error) {
-                    // FIX: Pass the real error message!
                     registerFailedAttempt(error.message);
                 } else {
                     localStorage.setItem('univac_last_portal_mode', 'customer');
                     addToast("Success! Please check your email for the confirmation link.", "success");
                     setIsSignUp(false);
                 }
-            } else {
+            } 
+            // --- SIGN IN FLOW ---
+            else {
                 const { data: authData, error } = await supabase.auth.signInWithPassword({
-                    email,
-                    password,
-                    options: { captchaToken: captchaToken }
+                    email, password, options: { captchaToken: captchaToken }
                 });
 
                 if (error) {
-                    // FIX: Pass the real error message!
                     registerFailedAttempt(error.message);
                     setLoading(false);
                     return;
                 }
 
-                const { data: profile } = await supabase
-                    .from('profiles')
-                    .select('role')
-                    .eq('id', authData.user.id)
-                    .maybeSingle();
-
+                const { data: profile } = await supabase.from('profiles').select('role').eq('id', authData.user.id).maybeSingle();
                 const isStaffAccount = ['employee', 'manager', 'admin'].includes(profile?.role);
 
                 localStorage.setItem('univac_last_portal_mode', isStaffAccount ? 'staff' : 'customer');
@@ -252,11 +254,7 @@ export default function Login() {
 
             {/* --- THEME TOGGLE --- */}
             <div className="absolute top-4 right-4 z-50">
-                <button
-                    onClick={toggleTheme}
-                    className="btn btn-circle btn-ghost w-14 h-14 text-[var(--text-muted)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-main)] transition-all shadow-sm border border-transparent hover:border-[var(--border-color)]"
-                    title="Toggle Theme"
-                >
+                <button onClick={toggleTheme} className="btn btn-circle btn-ghost w-14 h-14 text-[var(--text-muted)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-main)] transition-all shadow-sm border border-transparent hover:border-[var(--border-color)]" title="Toggle Theme">
                     {theme === 'light' ? <Moon size={24} /> : <Sun size={24} />}
                 </button>
             </div>
@@ -267,7 +265,6 @@ export default function Login() {
 
             <div className="w-full max-w-md bg-[var(--bg-surface)] rounded-[32px] shadow-2xl shadow-black/5 border border-[var(--border-color)] relative z-10 overflow-hidden animate-pop">
 
-                {/* Premium Header Accent */}
                 <div className={`h-2 w-full bg-gradient-to-r transition-colors duration-500 ${isCustomer ? 'from-emerald-400 via-teal-500 to-emerald-600' : 'from-indigo-500 via-purple-500 to-pink-500'}`}></div>
 
                 <div className="p-8 sm:p-10">
@@ -277,40 +274,42 @@ export default function Login() {
                         <button
                             type="button"
                             className={`flex-1 py-2 text-[10px] uppercase tracking-widest font-black rounded-lg transition-all flex items-center justify-center gap-2 ${isCustomer ? 'bg-[var(--bg-surface)] text-emerald-600 dark:text-emerald-400 shadow-sm ring-1 ring-black/5 dark:ring-white/5' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
-                            onClick={() => { setPortalMode('customer'); }}
+                            onClick={() => { setPortalMode('customer'); setIsForgotPassword(false); }}
                         >
                             <User size={14} /> Customer
                         </button>
                         <button
                             type="button"
                             className={`flex-1 py-2 text-[10px] uppercase tracking-widest font-black rounded-lg transition-all flex items-center justify-center gap-2 ${!isCustomer ? 'bg-[var(--bg-surface)] text-indigo-600 dark:text-indigo-400 shadow-sm ring-1 ring-black/5 dark:ring-white/5' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
-                            onClick={() => { setPortalMode('staff'); setIsSignUp(false); }}
+                            onClick={() => { setPortalMode('staff'); setIsSignUp(false); setIsForgotPassword(false); }}
                         >
                             <ShieldAlert size={14} /> Staff
                         </button>
                     </div>
 
-                    {/* Brand Identity with Secret Admin Override */}
                     <div className="flex flex-col items-center text-center mb-8 animate-fade-in-up">
                         <div
                             onClick={handleSecretOverride}
                             className={`w-16 h-16 rounded-2xl flex items-center justify-center text-white shadow-xl mb-5 transition-colors duration-500 cursor-pointer hover:scale-105 active:scale-95 ${isCustomer ? 'bg-gradient-to-br from-emerald-400 to-teal-600 shadow-emerald-500/30' : 'bg-gradient-to-br from-indigo-500 to-purple-600 shadow-indigo-500/30'}`}
                             title={isLockedOut ? "Admin Override (Tap 5 times to reset lock)" : "University Vac & Sew"}
                         >
-                            {isCustomer ? <Package size={32} fill="currentColor" /> : <Wrench size={32} fill="currentColor" />}
+                            {isForgotPassword ? <KeyRound size={32} /> : (isCustomer ? <Package size={32} fill="currentColor" /> : <Wrench size={32} fill="currentColor" />)}
                         </div>
                         <h1 className="text-2xl sm:text-3xl font-black text-[var(--text-main)] tracking-tight leading-none mb-2">
-                            University <span className={`transition-colors duration-500 ${isCustomer ? 'text-emerald-500' : 'text-indigo-500'}`}>Vac & Sew</span>
+                            {isForgotPassword ? 'Reset Password' : <>University <span className={`transition-colors duration-500 ${isCustomer ? 'text-emerald-500' : 'text-indigo-500'}`}>Vac & Sew</span></>}
                         </h1>
                         <p className="text-xs font-bold text-[var(--text-muted)] mt-1">
-                            {isCustomer ? (isSignUp ? 'Create your repair account' : 'Track your active repairs') : 'Authorized personnel login'}
+                            {isForgotPassword 
+                                ? 'Enter your email to receive a recovery link.' 
+                                : isCustomer 
+                                    ? (isSignUp ? 'Create your repair account' : 'Track your active repairs') 
+                                    : 'Authorized personnel login'
+                            }
                         </p>
                     </div>
 
-                    {/* Form Container */}
                     <form onSubmit={handleAuth} className="space-y-4 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
 
-                        {/* Lockout Warning Banner */}
                         {isLockedOut ? (
                             <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 p-4 rounded-xl flex items-start gap-3 shadow-inner animate-pulse">
                                 <AlertTriangle className="text-red-500 flex-none mt-0.5" size={18} />
@@ -331,14 +330,11 @@ export default function Login() {
 
                         <div className={`space-y-4 transition-all duration-500 ${isLocked ? 'opacity-50 grayscale pointer-events-none' : 'opacity-100'}`}>
 
-                            {/* Full Name (Only for Customer Sign Up) */}
-                            {isCustomer && isSignUp && (
+                            {isCustomer && isSignUp && !isForgotPassword && (
                                 <div className="form-control animate-pop">
                                     <label className="label text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] pb-1.5 pl-1">Full Name</label>
                                     <div className="relative group">
-                                        <div className={`absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-[var(--text-muted)] group-focus-within:text-${primaryColor}-500 transition-colors`}>
-                                            <User size={18} />
-                                        </div>
+                                        <div className={`absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-[var(--text-muted)] group-focus-within:text-${primaryColor}-500 transition-colors`}><User size={18} /></div>
                                         <input type="text" required placeholder="John Doe" className={`input input-bordered w-full h-14 pl-12 bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] font-medium shadow-inner transition-all focus:border-${primaryColor}-500 focus:ring-4 focus:ring-${primaryColor}-500/10 text-base`} value={fullName} onChange={(e) => setFullName(e.target.value)} disabled={loading || isLocked} />
                                     </div>
                                 </div>
@@ -347,57 +343,56 @@ export default function Login() {
                             <div className="form-control">
                                 <label className="label text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] pb-1.5 pl-1">Email Address</label>
                                 <div className="relative group">
-                                    <div className={`absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-[var(--text-muted)] group-focus-within:text-${primaryColor}-500 transition-colors`}>
-                                        <Mail size={18} />
-                                    </div>
+                                    <div className={`absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-[var(--text-muted)] group-focus-within:text-${primaryColor}-500 transition-colors`}><Mail size={18} /></div>
                                     <input type="email" required autoComplete="username" placeholder="you@example.com" className={`input input-bordered w-full h-14 pl-12 bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] font-medium shadow-inner transition-all focus:border-${primaryColor}-500 focus:ring-4 focus:ring-${primaryColor}-500/10 text-base`} value={email} onChange={(e) => setEmail(e.target.value)} disabled={loading || isLocked} />
                                 </div>
                             </div>
 
-                            <div className="form-control">
-                                <label className="label text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] pb-1.5 pl-1">Password</label>
-                                <div className="relative group">
-                                    <div className={`absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-[var(--text-muted)] group-focus-within:text-${primaryColor}-500 transition-colors`}>
-                                        <Lock size={18} />
+                            {!isForgotPassword && (
+                                <div className="form-control animate-fade-in">
+                                    <div className="flex justify-between items-center pb-1.5 px-1">
+                                        <label className="label text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] p-0">Password</label>
+                                        {!isSignUp && (
+                                            <button type="button" onClick={() => setIsForgotPassword(true)} className={`text-[10px] font-bold hover:underline transition-colors ${isCustomer ? 'text-emerald-500' : 'text-indigo-500'}`}>Forgot?</button>
+                                        )}
                                     </div>
-                                    <input type="password" required autoComplete={isSignUp ? "new-password" : "current-password"} placeholder="••••••••" className={`input input-bordered w-full h-14 pl-12 bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] font-medium shadow-inner transition-all focus:border-${primaryColor}-500 focus:ring-4 focus:ring-${primaryColor}-500/10 text-base tracking-widest`} value={password} onChange={(e) => setPassword(e.target.value)} disabled={loading || isLocked} />
+                                    <div className="relative group">
+                                        <div className={`absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-[var(--text-muted)] group-focus-within:text-${primaryColor}-500 transition-colors`}><Lock size={18} /></div>
+                                        <input type="password" required autoComplete={isSignUp ? "new-password" : "current-password"} placeholder="••••••••" className={`input input-bordered w-full h-14 pl-12 bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] font-medium shadow-inner transition-all focus:border-${primaryColor}-500 focus:ring-4 focus:ring-${primaryColor}-500/10 text-base tracking-widest`} value={password} onChange={(e) => setPassword(e.target.value)} disabled={loading || isLocked} />
+                                    </div>
                                 </div>
-                            </div>
+                            )}
                         </div>
 
-                        {/* Turnstile Widget Box */}
                         <div className={`flex justify-center my-4 w-full overflow-hidden min-h-[65px] rounded-xl transition-opacity ${isLockedOut ? 'opacity-0 pointer-events-none hidden' : 'opacity-100'}`}>
-                            <Turnstile
-                                ref={turnstileRef} // <-- ATTACHED THE REF HERE
-                                siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY}
-                                onSuccess={(token) => setCaptchaToken(token)}
-                                options={{ theme: theme === 'dark' ? 'dark' : 'light', size: 'flexible' }}
-                            />
+                            <Turnstile ref={turnstileRef} siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY} onSuccess={(token) => setCaptchaToken(token)} options={{ theme: theme === 'dark' ? 'dark' : 'light', size: 'flexible' }} />
                         </div>
 
                         <button
                             type="submit"
-                            disabled={loading || isLocked || !email || !password || (isSignUp && !fullName)}
+                            disabled={loading || isLocked || !email || (!isForgotPassword && !password) || (!isForgotPassword && isSignUp && !fullName)}
                             className={`btn w-full h-14 mt-2 text-white font-black text-base tracking-wide border-none shadow-lg transition-all hover:scale-[1.02] active:scale-95 gap-2 group disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed ${isCustomer ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-500/30' : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-500/30'}`}
                         >
                             {loading ? <span className="loading loading-spinner"></span> : (
-                                <>{isSignUp ? 'Create Account' : 'Secure Login'} <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" /></>
+                                <>
+                                    {isForgotPassword ? 'Send Reset Link' : (isSignUp ? 'Create Account' : 'Secure Login')} 
+                                    <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
+                                </>
                             )}
                         </button>
                     </form>
 
-                    {/* Footer Toggle (Only visible for customers) */}
                     <div className="mt-8 pt-6 border-t-2 border-dashed border-[var(--border-color)] text-center animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
-                        {isCustomer ? (
+                        {isForgotPassword ? (
+                            <button type="button" className={`text-xs font-black uppercase tracking-widest transition-colors hover:underline ${isCustomer ? 'text-emerald-600 dark:text-emerald-400' : 'text-indigo-600 dark:text-indigo-400'}`} onClick={() => setIsForgotPassword(false)}>
+                                Back to Login
+                            </button>
+                        ) : isCustomer ? (
                             <>
                                 <p className="text-xs font-bold text-[var(--text-muted)]">
                                     {isSignUp ? "Already have an account?" : "Dropping off a new repair?"}
                                 </p>
-                                <button
-                                    type="button"
-                                    className={`text-[10px] font-black uppercase tracking-widest mt-1.5 transition-colors hover:underline ${isCustomer ? 'text-emerald-600 dark:text-emerald-400' : 'text-indigo-600 dark:text-indigo-400'}`}
-                                    onClick={() => setIsSignUp(!isSignUp)}
-                                >
+                                <button type="button" className={`text-[10px] font-black uppercase tracking-widest mt-1.5 transition-colors hover:underline ${isCustomer ? 'text-emerald-600 dark:text-emerald-400' : 'text-indigo-600 dark:text-indigo-400'}`} onClick={() => setIsSignUp(!isSignUp)}>
                                     {isSignUp ? "Sign In Instead" : "Create a Customer Account"}
                                 </button>
                             </>
@@ -410,12 +405,8 @@ export default function Login() {
                     </div>
                 </div>
             </div>
-
-            {/* Background Footer Signature */}
             <div className="absolute bottom-6 text-center w-full z-0">
-                <p className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] opacity-50">
-                    © 2026 University Vacuum & Sewing System
-                </p>
+                <p className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] opacity-50">© 2026 University Vacuum & Sewing System</p>
             </div>
         </div>
     );

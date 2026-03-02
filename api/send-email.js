@@ -1,7 +1,4 @@
-import { Resend } from 'resend';
-
-// Initialize Resend with the key from environment variables
-const resend = new Resend(process.env.VITE_RESEND_API_KEY);
+import nodemailer from 'nodemailer';
 
 export default async function handler(request, response) {
     // 1. Setup CORS (Allows your frontend to talk to this backend)
@@ -23,17 +20,26 @@ export default async function handler(request, response) {
     const { to, subject, html } = request.body;
 
     try {
-        // 3. Send the Email via Resend
-        const data = await resend.emails.send({
-            from: 'Vacuum Shop <onboarding@resend.dev>', // Use this for testing. Later change to 'updates@yourdomain.com'
-            to: [to], // In 'Testing Mode', this can ONLY be the email you signed up with.
+        // 3. Configure the Gmail Transporter
+        const transporter = nodemailer.createTransport({
+            service: 'gmail',
+            auth: {
+                user: process.env.EMAIL_USER,
+                pass: process.env.EMAIL_APP_PASSWORD
+            }
+        });
+
+        // 4. Send the Email
+        const info = await transporter.sendMail({
+            from: `"University Vac & Sew" <${process.env.EMAIL_USER}>`,
+            to: to, // Now you can send to ANY email address!
             subject: subject,
             html: html,
         });
 
-        response.status(200).json(data);
+        response.status(200).json({ success: true, messageId: info.messageId });
     } catch (error) {
-        console.error(error);
+        console.error("Email Error:", error);
         response.status(500).json({ error: error.message });
     }
 }

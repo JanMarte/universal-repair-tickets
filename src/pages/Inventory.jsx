@@ -3,7 +3,7 @@ import { supabase } from '../supabaseClient';
 import { useNavigate } from 'react-router-dom';
 import {
     Search, Plus, Package, AlertTriangle, ArrowLeft,
-    Edit3, Trash2, QrCode, MapPin, SlidersHorizontal, ArrowDownAZ, ArrowUp10, DollarSign, Box, Hash, Tag
+    Edit3, Trash2, QrCode, MapPin, SlidersHorizontal, ArrowDownAZ, ArrowUp10, DollarSign, Box, Hash, Tag, Wrench, Moon, Sun
 } from 'lucide-react';
 import { useToast } from '../context/ToastProvider';
 import { formatCurrency } from '../utils';
@@ -22,6 +22,7 @@ export default function Inventory() {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterTab, setFilterTab] = useState('all'); // 'all', 'low', 'out'
     const [sortBy, setSortBy] = useState('name'); // 'name', 'qty_asc', 'qty_desc', 'price_high'
+    const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light');
 
     // Modal State
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -31,6 +32,17 @@ export default function Inventory() {
     useEffect(() => {
         fetchInventory();
     }, []);
+
+    useEffect(() => {
+        document.documentElement.setAttribute('data-theme', theme);
+        if (theme === 'dark') document.documentElement.classList.add('dark');
+        else document.documentElement.classList.remove('dark');
+        localStorage.setItem('theme', theme);
+    }, [theme]);
+
+    const toggleTheme = () => {
+        setTheme(prev => prev === 'light' ? 'dark' : 'light');
+    };
 
     async function fetchInventory() {
         setLoading(true);
@@ -89,16 +101,34 @@ export default function Inventory() {
     return (
         <div className="min-h-screen p-4 md:p-6 font-sans pb-24 transition-colors duration-300">
 
-            {/* NAVBAR */}
-            <div className="navbar rounded-2xl mb-6 sticky top-2 z-40 flex justify-between shadow-sm backdrop-blur-md bg-[var(--bg-surface)] border border-[var(--border-color)] px-3 py-2 animate-fade">
-                <div className="flex items-center">
-                    <button onClick={() => navigate('/dashboard')} className="btn btn-sm btn-ghost gap-2 text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-main)] transition-colors rounded-lg">
-                        <ArrowLeft size={18} /> <span className="hidden md:inline font-bold">Dashboard</span>
+            {/* PREMIUM NAVBAR */}
+            <div className="navbar rounded-2xl mb-6 sticky top-2 z-40 flex justify-between shadow-sm backdrop-blur-md bg-[var(--bg-surface)] border border-[var(--border-color)] px-3 py-2 animate-fade relative">
+
+                <div className="flex items-center z-10">
+                    <button onClick={() => navigate('/dashboard')} className="btn btn-sm btn-ghost gap-2 px-3 text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-main)] transition-all rounded-lg group">
+                        <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform duration-300" />
+                        <span className="hidden md:inline font-bold">Dashboard</span>
                     </button>
                 </div>
-                <div className="flex gap-2">
-                    <button onClick={() => setIsScanning(true)} className="btn btn-sm btn-circle btn-ghost text-[var(--text-muted)] hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all"><QrCode size={18} /></button>
-                    <button onClick={() => { setEditingItem(null); setIsModalOpen(true); }} className="btn btn-sm btn-gradient text-white gap-2 shadow-lg shadow-indigo-500/30 hover:scale-105 border-none transition-all px-4 rounded-full">
+
+                {/* --- CENTER BRANDING --- */}
+                <div
+                    onClick={() => navigate('/')}
+                    className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 hidden md:flex items-center gap-2 cursor-pointer hover:scale-105 transition-transform z-10"
+                    title="Go to Dashboard"
+                >
+                    <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
+                        <Wrench size={14} fill="currentColor" />
+                    </div>
+                    <span className="font-black text-[var(--text-main)] text-lg tracking-tight">University <span className="text-indigo-500">Vac & Sew</span></span>
+                </div>
+
+                <div className="flex gap-1 sm:gap-2 z-10 items-center">
+                    <button onClick={() => setIsScanning(true)} className="btn btn-sm btn-circle btn-ghost text-[var(--text-muted)] hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all" title="Scan Barcode"><QrCode size={18} /></button>
+                    <button onClick={toggleTheme} className="btn btn-sm btn-circle btn-ghost text-[var(--text-muted)] hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-all" title="Toggle Theme">
+                        {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+                    </button>
+                    <button onClick={() => { setEditingItem(null); setIsModalOpen(true); }} className="btn btn-sm btn-gradient text-white gap-2 shadow-lg shadow-indigo-500/30 hover:scale-105 border-none transition-all px-4 rounded-full ml-1">
                         <Plus size={16} strokeWidth={3} /> <span className="font-bold tracking-wide">Add Part</span>
                     </button>
                 </div>

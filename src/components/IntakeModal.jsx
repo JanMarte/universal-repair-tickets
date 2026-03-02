@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Save, Search, FileText, Smartphone, Hash, User, Mail, Phone, CheckCircle, AlertCircle, Tag, Cpu, PlusCircle } from 'lucide-react';
+import { X, Save, Search, FileText, Smartphone, Hash, User, Mail, Phone, CheckCircle, AlertCircle, Tag, Cpu, PlusCircle, Scale, Check } from 'lucide-react'; // <-- Added 'Check'
 import { supabase } from '../supabaseClient';
 import { useToast } from '../context/ToastProvider';
 import { formatPhoneNumber } from '../utils';
@@ -11,6 +11,10 @@ export default function IntakeModal({ isOpen, onClose, onTicketCreated, initialC
     const [searchResults, setSearchResults] = useState([]);
     const [selectedCustomer, setSelectedCustomer] = useState(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Terms of Service State
+    const [shopTerms, setShopTerms] = useState('');
+    const [termsAccepted, setTermsAccepted] = useState(false);
 
     // Validation State
     const [errors, setErrors] = useState({});
@@ -30,13 +34,13 @@ export default function IntakeModal({ isOpen, onClose, onTicketCreated, initialC
 
     useEffect(() => {
         if (isOpen) {
-            // Reset Form
             setErrors({});
             setIsShaking(false);
             setDevice({ brand: '', model: '', serial: '', description: '' });
+            setTermsAccepted(false);
             fetchCatalog();
+            fetchSettings();
 
-            // --- SMART PRE-FILL LOGIC ---
             if (initialCustomer) {
                 setActiveTab('existing');
                 setSelectedCustomer(initialCustomer);
@@ -50,6 +54,13 @@ export default function IntakeModal({ isOpen, onClose, onTicketCreated, initialC
             }
         }
     }, [isOpen, initialCustomer]);
+
+    async function fetchSettings() {
+        const { data } = await supabase.from('shop_settings').select('intake_terms').eq('id', 1).single();
+        if (data && data.intake_terms) {
+            setShopTerms(data.intake_terms);
+        }
+    }
 
     async function fetchCatalog() {
         const { data } = await supabase.from('device_catalog').select('*');
@@ -106,6 +117,11 @@ export default function IntakeModal({ isOpen, onClose, onTicketCreated, initialC
         if (!device.model) { newErrors.model = true; isValid = false; }
         if (!device.description) { newErrors.description = true; isValid = false; }
 
+        if (shopTerms && !termsAccepted) {
+            newErrors.terms = true;
+            isValid = false;
+        }
+
         if (!isValid) {
             setErrors(newErrors);
             setIsShaking(false);
@@ -116,7 +132,7 @@ export default function IntakeModal({ isOpen, onClose, onTicketCreated, initialC
 
             const now = Date.now();
             if (now - lastToastTime.current > 3000) {
-                addToast("Please check the required fields.", "error");
+                addToast(newErrors.terms ? "Customer must agree to the Terms of Service." : "Please check the required fields.", "error");
                 lastToastTime.current = now;
             }
             return;
@@ -129,7 +145,6 @@ export default function IntakeModal({ isOpen, onClose, onTicketCreated, initialC
             let finalName = '';
             let finalPhone = '';
 
-            // 1. Resolve Customer Data based on active tab
             if (activeTab === 'new') {
                 const { data: createdCust, error: custError } = await supabase
                     .from('customers')
@@ -146,18 +161,16 @@ export default function IntakeModal({ isOpen, onClose, onTicketCreated, initialC
                 finalName = createdCust.full_name;
                 finalPhone = createdCust.phone;
             } else {
-                // It's an existing customer
                 finalName = selectedCustomer.full_name;
                 finalPhone = selectedCustomer.phone;
             }
 
-            // 2. Create Ticket (BUG FIX: Inject finalName and finalPhone here)
             const { data: newTicket, error: ticketError } = await supabase
                 .from('tickets')
                 .insert([{
                     customer_id: customerId,
-                    customer_name: finalName,   // <-- BUG FIX: Copies the text to the ticket
-                    phone: finalPhone,          // <-- BUG FIX: Copies the text to the ticket
+                    customer_name: finalName,
+                    phone: finalPhone,
                     brand: device.brand,
                     model: device.model,
                     serial_number: device.serial,
@@ -170,15 +183,13 @@ export default function IntakeModal({ isOpen, onClose, onTicketCreated, initialC
 
             if (ticketError) throw ticketError;
 
-            // 3. Create initial audit log
             await supabase.from('audit_logs').insert([{
                 ticket_id: newTicket.id,
                 actor_name: 'System',
                 action: 'TICKET CREATED',
-                details: `Intake completed for ${device.brand} ${device.model}`
+                details: `Intake completed for ${device.brand} ${device.model}. Terms accepted.`
             }]);
 
-            // Success!
             addToast("Ticket created successfully!", "success");
             if (onTicketCreated) onTicketCreated();
             onClose();
@@ -210,7 +221,6 @@ export default function IntakeModal({ isOpen, onClose, onTicketCreated, initialC
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade">
             <div className="bg-[var(--bg-surface)] w-full max-w-2xl rounded-2xl shadow-2xl border border-[var(--border-color)] flex flex-col max-h-[90vh] overflow-hidden animate-pop">
 
-                {/* HEADER */}
                 <div className="p-6 border-b-2 border-dashed border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-surface)] shrink-0">
                     <div>
                         <h2 className="text-xl font-black text-[var(--text-main)] flex items-center gap-2 tracking-tight">
@@ -227,8 +237,7 @@ export default function IntakeModal({ isOpen, onClose, onTicketCreated, initialC
                     </button>
                 </div>
 
-                {/* BODY */}
-                <div className="overflow-y-auto custom-scrollbar p-6 space-y-8 bg-[var(--bg-subtle)] flex-1">
+                <div className="overflow-y-auto custom-scrollbar p-6 space-y-6 bg-[var(--bg-subtle)] flex-1">
 
                     {/* CUSTOMER SECTION */}
                     <div className="bg-[var(--bg-surface)] p-5 rounded-2xl border border-[var(--border-color)] shadow-sm">
@@ -352,7 +361,7 @@ export default function IntakeModal({ isOpen, onClose, onTicketCreated, initialC
                             <Smartphone size={16} className="text-amber-500" /> Device Information
                         </h3>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="form-control">
                                 <label className="label text-[9px] font-black text-[var(--text-muted)] uppercase tracking-widest mb-1 p-0">Brand</label>
                                 <div className="relative group">
@@ -388,6 +397,36 @@ export default function IntakeModal({ isOpen, onClose, onTicketCreated, initialC
                             </div>
                         </div>
                     </div>
+
+                    {/* --- BULLETPROOF CUSTOM CHECKBOX --- */}
+                    {shopTerms && (
+                        <div className={`bg-[var(--bg-surface)] p-5 rounded-2xl border shadow-sm transition-colors duration-300 ${errors.terms ? 'border-red-400 ring-2 ring-red-500/20 bg-red-50 dark:bg-red-900/10' : 'border-[var(--border-color)]'}`}>
+                            <h3 className="text-[10px] font-black uppercase text-[var(--text-muted)] tracking-widest mb-2 flex items-center gap-2">
+                                <Scale size={14} className="text-indigo-500" /> Shop Terms of Service
+                            </h3>
+                            <div className="h-20 overflow-y-auto custom-scrollbar bg-[var(--bg-subtle)] p-3 rounded-xl border border-[var(--border-color)] shadow-inner text-xs text-[var(--text-muted)] mb-4 whitespace-pre-wrap leading-relaxed">
+                                {shopTerms}
+                            </div>
+
+                            {/* Fully Custom React Checkbox Container */}
+                            <div
+                                className="flex items-start gap-3 cursor-pointer select-none group"
+                                onClick={() => {
+                                    const newValue = !termsAccepted;
+                                    setTermsAccepted(newValue);
+                                    if (newValue) clearError('terms');
+                                }}
+                            >
+                                <div className={`w-5 h-5 rounded flex items-center justify-center flex-none mt-0.5 transition-all duration-200 border ${termsAccepted ? 'bg-emerald-500 border-emerald-500 text-white scale-110 shadow-sm shadow-emerald-500/30' : (errors.terms ? 'border-red-500 bg-white dark:bg-slate-800' : 'border-[var(--border-color)] bg-[var(--bg-subtle)] group-hover:border-indigo-400')}`}>
+                                    {termsAccepted && <Check size={14} strokeWidth={4} />}
+                                </div>
+                                <span className={`text-sm font-bold mt-0.5 transition-colors ${errors.terms ? 'text-red-500' : (termsAccepted ? 'text-emerald-600 dark:text-emerald-400' : 'text-[var(--text-main)]')}`}>
+                                    Customer has read and agrees to the shop terms and conditions.
+                                </span>
+                            </div>
+                        </div>
+                    )}
+
                 </div>
 
                 {/* FOOTER */}
@@ -395,7 +434,12 @@ export default function IntakeModal({ isOpen, onClose, onTicketCreated, initialC
                     <button onClick={onClose} type="button" className="btn btn-ghost font-bold text-[var(--text-muted)] hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 border border-transparent hover:border-red-200 dark:hover:border-red-900/30 transition-all">
                         Cancel
                     </button>
-                    <button onClick={handleSubmit} disabled={isSubmitting} className="btn btn-gradient px-8 shadow-lg shadow-indigo-500/30 text-white font-bold tracking-wide transition-transform hover:scale-105 active:scale-95 border-none">
+                    {/* Button physically disabled until terms are met (if terms exist) */}
+                    <button
+                        onClick={handleSubmit}
+                        disabled={isSubmitting || (shopTerms && !termsAccepted)}
+                        className="btn btn-gradient px-8 shadow-lg shadow-indigo-500/30 text-white font-bold tracking-wide transition-transform hover:scale-105 active:scale-95 border-none disabled:opacity-50 disabled:grayscale disabled:hover:scale-100 disabled:cursor-not-allowed"
+                    >
                         {isSubmitting ? <span className="loading loading-spinner"></span> : <><Save size={18} strokeWidth={2.5} /> Create Ticket</>}
                     </button>
                 </div>
