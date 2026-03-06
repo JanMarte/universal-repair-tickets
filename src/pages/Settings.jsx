@@ -1,16 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
-import { useNavigate } from 'react-router-dom';
 import { useToast } from '../context/ToastProvider';
+import Navbar from '../components/Navbar';
 import {
-    ArrowLeft, Settings as SettingsIcon, User, Store, Shield,
-    Save, Moon, Sun, Lock, Building2, Percent, Phone, MapPin,
+    User, Store, Shield, Save, Lock, Building2, Percent, Phone, MapPin,
     Clock, DollarSign, FileText, MessageSquare, PlusCircle, Trash2,
     Database, Download, BellRing, Scale, AlertTriangle, PackageMinus, RotateCcw
 } from 'lucide-react';
 
 export default function Settings() {
-    const navigate = useNavigate();
     const { addToast } = useToast();
 
     const [currentUser, setCurrentUser] = useState(null);
@@ -19,11 +17,10 @@ export default function Settings() {
     const [exporting, setExporting] = useState(false);
 
     const [activeTab, setActiveTab] = useState('personal');
-    const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light');
 
     const [profileForm, setProfileForm] = useState({ full_name: '' });
-    
-    const [shopForm, setShopForm] = useState({ 
+
+    const [shopForm, setShopForm] = useState({
         shop_name: '', shop_address: '', shop_phone: '', tax_rate: '',
         default_labor_rate: '', receipt_disclaimer: '', business_hours: '',
         quick_replies: [], auto_email_status_change: true, auto_email_new_message: true,
@@ -36,13 +33,6 @@ export default function Settings() {
     const [dangerAction, setDangerAction] = useState(null); // 'tickets' | 'inventory' | null
     const [dangerInput, setDangerInput] = useState('');
     const [isExecutingDanger, setIsExecutingDanger] = useState(false);
-
-    useEffect(() => {
-        document.documentElement.setAttribute('data-theme', theme);
-        if (theme === 'dark') document.documentElement.classList.add('dark');
-        else document.documentElement.classList.remove('dark');
-        localStorage.setItem('theme', theme);
-    }, [theme]);
 
     useEffect(() => {
         fetchData();
@@ -77,27 +67,23 @@ export default function Settings() {
         setLoading(false);
     }
 
-    const toggleTheme = () => {
-        setTheme(prev => prev === 'light' ? 'dark' : 'light');
+    const addQuickReply = () => {
+        setShopForm({ ...shopForm, quick_replies: [...shopForm.quick_replies, { label: '', text: '' }] });
     };
 
-    const addQuickReply = () => { 
-        setShopForm({ ...shopForm, quick_replies: [...shopForm.quick_replies, { label: '', text: '' }] }); 
-    };
-    
-    const executeDeleteReply = () => { 
+    const executeDeleteReply = () => {
         if (replyToDelete === null) return;
-        const newReplies = [...shopForm.quick_replies]; 
-        newReplies.splice(replyToDelete, 1); 
-        setShopForm({ ...shopForm, quick_replies: newReplies }); 
+        const newReplies = [...shopForm.quick_replies];
+        newReplies.splice(replyToDelete, 1);
+        setShopForm({ ...shopForm, quick_replies: newReplies });
         setReplyToDelete(null);
         addToast("Reply removed. Remember to save changes.", "info");
     };
 
-    const updateQuickReply = (index, field, value) => { 
-        const newReplies = [...shopForm.quick_replies]; 
-        newReplies[index][field] = value; 
-        setShopForm({ ...shopForm, quick_replies: newReplies }); 
+    const updateQuickReply = (index, field, value) => {
+        const newReplies = [...shopForm.quick_replies];
+        newReplies[index][field] = value;
+        setShopForm({ ...shopForm, quick_replies: newReplies });
     };
 
     const handleExecuteDanger = async () => {
@@ -106,21 +92,21 @@ export default function Settings() {
             if (dangerAction === 'tickets') {
                 const ninetyDaysAgo = new Date();
                 ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-                
+
                 const { error } = await supabase
                     .from('tickets')
                     .delete()
                     .eq('status', 'completed')
                     .lt('created_at', ninetyDaysAgo.toISOString());
-                
+
                 if (error) throw error;
                 addToast(`Successfully deleted old completed tickets.`, "success");
             } else if (dangerAction === 'inventory') {
                 const { error } = await supabase
                     .from('inventory')
                     .update({ quantity: 0 })
-                    .gt('quantity', 0); 
-                    
+                    .gt('quantity', 0);
+
                 if (error) throw error;
                 addToast("All inventory counts have been reset to zero.", "success");
             }
@@ -140,7 +126,7 @@ export default function Settings() {
             const { data: tickets, error } = await supabase.from('tickets').select(`id, created_at, status, brand, model, serial_number, description, estimate_total, is_backordered, customer_name, phone`).order('created_at', { ascending: false });
             if (error) throw error;
             const headers = ['Ticket ID', 'Date Created', 'Status', 'Customer Name', 'Phone', 'Brand', 'Model', 'Serial', 'Total Billed', 'Backordered'];
-            const rows = tickets.map(t => [ t.id, new Date(t.created_at).toLocaleDateString(), t.status, `"${(t.customer_name || '').replace(/"/g, '""')}"`, `"${t.phone || ''}"`, `"${(t.brand || '').replace(/"/g, '""')}"`, `"${(t.model || '').replace(/"/g, '""')}"`, `"${(t.serial_number || '').replace(/"/g, '""')}"`, t.estimate_total || 0, t.is_backordered ? 'YES' : 'NO' ].join(','));
+            const rows = tickets.map(t => [t.id, new Date(t.created_at).toLocaleDateString(), t.status, `"${(t.customer_name || '').replace(/"/g, '""')}"`, `"${t.phone || ''}"`, `"${(t.brand || '').replace(/"/g, '""')}"`, `"${(t.model || '').replace(/"/g, '""')}"`, `"${(t.serial_number || '').replace(/"/g, '""')}"`, t.estimate_total || 0, t.is_backordered ? 'YES' : 'NO'].join(','));
             const csvContent = [headers.join(','), ...rows].join('\n');
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
@@ -159,20 +145,20 @@ export default function Settings() {
     const handleSaveShop = async () => {
         if (currentUser?.role !== 'admin') { addToast("Only administrators can update shop settings.", "error"); return; }
         setSaving(true);
-        
+
         const taxRateDecimal = parseFloat(shopForm.tax_rate || 0) / 100;
         const laborRate = parseFloat(shopForm.default_labor_rate || 0);
 
         const { error } = await supabase.from('shop_settings').update({
-            shop_name: shopForm.shop_name, 
-            shop_address: shopForm.shop_address, 
+            shop_name: shopForm.shop_name,
+            shop_address: shopForm.shop_address,
             shop_phone: shopForm.shop_phone,
-            tax_rate: taxRateDecimal, 
-            default_labor_rate: laborRate, 
+            tax_rate: taxRateDecimal,
+            default_labor_rate: laborRate,
             receipt_disclaimer: shopForm.receipt_disclaimer,
-            business_hours: shopForm.business_hours, 
-            quick_replies: shopForm.quick_replies, 
-            auto_email_status_change: shopForm.auto_email_status_change, 
+            business_hours: shopForm.business_hours,
+            quick_replies: shopForm.quick_replies,
+            auto_email_status_change: shopForm.auto_email_status_change,
             auto_email_new_message: shopForm.auto_email_new_message,
             intake_terms: shopForm.intake_terms,
             updated_at: new Date()
@@ -180,7 +166,7 @@ export default function Settings() {
 
         if (error) {
             console.error(error);
-            addToast(`Error: ${error.message}`, "error"); 
+            addToast(`Error: ${error.message}`, "error");
         } else {
             addToast("Shop settings updated successfully", "success");
         }
@@ -192,26 +178,11 @@ export default function Settings() {
 
     return (
         <div className="min-h-screen p-4 md:p-6 font-sans transition-colors duration-300 pb-24">
-            <div className="max-w-5xl mx-auto space-y-6">
 
-                {/* NAVBAR */}
-                <div className="navbar rounded-2xl sticky top-2 z-40 flex justify-between shadow-sm backdrop-blur-md bg-[var(--bg-surface)]/90 border border-[var(--border-color)] px-4 py-3 animate-fade-in-up">
-                    <div className="flex items-center gap-2">
-                        <button onClick={() => navigate('/dashboard')} className="btn btn-sm btn-ghost gap-2 px-3 text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-main)] transition-all rounded-lg group">
-                            <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform duration-300" />
-                            <span className="hidden sm:inline font-bold">Dashboard</span>
-                        </button>
-                    </div>
-                    <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 hidden md:flex items-center gap-2 pointer-events-none">
-                        <div className="w-8 h-8 bg-gradient-to-br from-slate-700 to-slate-900 rounded-lg flex items-center justify-center text-white shadow-md"><SettingsIcon size={14} /></div>
-                        <span className="font-black text-[var(--text-main)] text-lg tracking-tight">System Preferences</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <button onClick={toggleTheme} className="w-10 h-10 flex items-center justify-center rounded-full bg-[var(--bg-subtle)] border border-[var(--border-color)] shadow-inner text-[var(--text-muted)] hover:text-indigo-500 transition-colors" title="Toggle Theme">
-                            {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
-                        </button>
-                    </div>
-                </div>
+            {/* GLOBAL NAVBAR INJECTED HERE */}
+            <Navbar />
+
+            <div className="max-w-5xl mx-auto space-y-6">
 
                 <div className="flex flex-col md:flex-row gap-8 items-start animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
 
@@ -322,11 +293,11 @@ export default function Settings() {
                                         </div>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                             <div className="form-control">
-                                                <label className="label text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] pl-1 flex items-center gap-1.5"><FileText size={12}/> Receipt Disclaimer</label>
+                                                <label className="label text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] pl-1 flex items-center gap-1.5"><FileText size={12} /> Receipt Disclaimer</label>
                                                 <textarea value={shopForm.receipt_disclaimer} onChange={(e) => setShopForm({ ...shopForm, receipt_disclaimer: e.target.value })} placeholder="Printed at the bottom of customer receipts..." className="textarea textarea-bordered w-full h-32 p-4 bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] font-medium shadow-inner focus:border-indigo-500 transition-all rounded-xl resize-none text-xs leading-relaxed"></textarea>
                                             </div>
                                             <div className="form-control">
-                                                <label className="label text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] pl-1 flex items-center gap-1.5"><Scale size={12}/> Intake Terms of Service</label>
+                                                <label className="label text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] pl-1 flex items-center gap-1.5"><Scale size={12} /> Intake Terms of Service</label>
                                                 <textarea value={shopForm.intake_terms} onChange={(e) => setShopForm({ ...shopForm, intake_terms: e.target.value })} placeholder="Legal agreement shown when creating a new ticket..." className="textarea textarea-bordered w-full h-32 p-4 bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] font-medium shadow-inner focus:border-amber-500 transition-all rounded-xl resize-none text-xs leading-relaxed"></textarea>
                                             </div>
                                         </div>
@@ -352,11 +323,11 @@ export default function Settings() {
                                         <div className="space-y-4">
                                             <label className="flex items-center justify-between cursor-pointer p-4 rounded-xl bg-[var(--bg-subtle)] border border-[var(--border-color)] hover:border-indigo-300 transition-colors shadow-inner">
                                                 <div><span className="font-bold text-sm text-[var(--text-main)] block mb-0.5">Status Updates</span><span className="text-xs text-[var(--text-muted)] font-medium">Send customer an email when their ticket status changes.</span></div>
-                                                <input type="checkbox" className="toggle toggle-success toggle-md" checked={shopForm.auto_email_status_change} onChange={(e) => setShopForm({...shopForm, auto_email_status_change: e.target.checked})} />
+                                                <input type="checkbox" className="toggle toggle-success toggle-md" checked={shopForm.auto_email_status_change} onChange={(e) => setShopForm({ ...shopForm, auto_email_status_change: e.target.checked })} />
                                             </label>
                                             <label className="flex items-center justify-between cursor-pointer p-4 rounded-xl bg-[var(--bg-subtle)] border border-[var(--border-color)] hover:border-indigo-300 transition-colors shadow-inner">
                                                 <div><span className="font-bold text-sm text-[var(--text-main)] block mb-0.5">New Messages</span><span className="text-xs text-[var(--text-muted)] font-medium">Send customer an email when a technician sends a direct message.</span></div>
-                                                <input type="checkbox" className="toggle toggle-success toggle-md" checked={shopForm.auto_email_new_message} onChange={(e) => setShopForm({...shopForm, auto_email_new_message: e.target.checked})} />
+                                                <input type="checkbox" className="toggle toggle-success toggle-md" checked={shopForm.auto_email_new_message} onChange={(e) => setShopForm({ ...shopForm, auto_email_new_message: e.target.checked })} />
                                             </label>
                                         </div>
                                     </div>
@@ -379,19 +350,18 @@ export default function Settings() {
                             </div>
                         )}
 
-                        {/* --- UPGRADED UI: SYSTEM & DATA TAB --- */}
                         {activeTab === 'data' && isAdmin && (
                             <div className="bg-[var(--bg-surface)] rounded-3xl border border-[var(--border-color)] shadow-sm overflow-hidden animate-fade-in">
-                                
+
                                 <div className="p-6 md:p-8 border-b border-[var(--border-color)] relative">
                                     <div className="absolute top-0 left-0 w-full h-1.5 bg-emerald-500"></div>
                                     <h2 className="text-2xl font-black text-[var(--text-main)] flex items-center gap-3">
                                         <Database className="text-emerald-500" /> System & Data
                                     </h2>
                                 </div>
-                                
+
                                 <div className="p-6 md:p-8 bg-[var(--bg-subtle)] space-y-8">
-                                    
+
                                     {/* Export Data Block */}
                                     <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] p-6 rounded-2xl shadow-sm flex flex-col md:flex-row items-center justify-between gap-6 hover:border-emerald-300 transition-colors group">
                                         <div className="flex items-center gap-4">
@@ -403,9 +373,9 @@ export default function Settings() {
                                                 <p className="text-sm text-[var(--text-muted)] mt-1 font-medium">Download a complete CSV record of all jobs, customers, and totals.</p>
                                             </div>
                                         </div>
-                                        <button 
-                                            onClick={handleExportData} 
-                                            disabled={exporting} 
+                                        <button
+                                            onClick={handleExportData}
+                                            disabled={exporting}
                                             className="btn bg-emerald-500 hover:bg-emerald-600 text-white border-none shadow-xl shadow-emerald-500/30 w-full md:w-auto px-8 h-14 rounded-xl transition-transform hover:-translate-y-1 gap-2 text-base font-bold"
                                         >
                                             {exporting ? <span className="loading loading-spinner"></span> : <><Download size={20} /> Download CSV</>}
@@ -416,7 +386,7 @@ export default function Settings() {
                                     <div className="relative overflow-hidden rounded-2xl border border-red-200 dark:border-red-900/50 shadow-sm animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
                                         {/* Subtle Background Tint */}
                                         <div className="absolute inset-0 bg-red-50/50 dark:bg-red-900/10 pointer-events-none"></div>
-                                        
+
                                         <div className="relative p-6 md:p-8">
                                             <div className="flex items-center gap-3 mb-6">
                                                 <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center text-red-600 dark:text-red-400 shadow-inner border border-red-200 dark:border-red-800">
@@ -427,9 +397,9 @@ export default function Settings() {
                                                     <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-widest">Irreversible Data Actions</p>
                                                 </div>
                                             </div>
-                                            
+
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                                
+
                                                 {/* Purge Tickets Card */}
                                                 <div className="bg-[var(--bg-surface)] rounded-xl border border-red-100 dark:border-red-900/30 shadow-sm p-6 flex flex-col justify-between hover:shadow-md hover:border-red-300 transition-all group">
                                                     <div className="mb-6">
@@ -439,8 +409,8 @@ export default function Settings() {
                                                         <h4 className="font-black text-[var(--text-main)] text-lg mb-2">Purge Old Tickets</h4>
                                                         <p className="text-sm font-medium text-[var(--text-muted)] leading-relaxed">Permanently delete all <strong className="text-[var(--text-main)]">Completed</strong> tickets older than 90 days. Frees up database space and speeds up queries.</p>
                                                     </div>
-                                                    <button 
-                                                        onClick={() => { setDangerAction('tickets'); setDangerInput(''); }} 
+                                                    <button
+                                                        onClick={() => { setDangerAction('tickets'); setDangerInput(''); }}
                                                         className="btn w-full bg-red-50 hover:bg-red-600 text-red-600 hover:text-white dark:bg-red-900/20 dark:hover:bg-red-600 border border-red-200 dark:border-red-800/50 hover:border-transparent shadow-sm hover:shadow-lg hover:shadow-red-500/30 transition-all h-12 text-sm font-bold gap-2"
                                                     >
                                                         <Trash2 size={18} /> Delete Old Tickets
@@ -451,13 +421,13 @@ export default function Settings() {
                                                 <div className="bg-[var(--bg-surface)] rounded-xl border border-red-100 dark:border-red-900/30 shadow-sm p-6 flex flex-col justify-between hover:shadow-md hover:border-red-300 transition-all group">
                                                     <div className="mb-6">
                                                         <div className="w-12 h-12 rounded-xl bg-[var(--bg-subtle)] border border-[var(--border-color)] flex items-center justify-center text-[var(--text-main)] mb-4 shadow-inner group-hover:text-red-500 transition-colors">
-                                                            <PackageMinus size={24} /> 
+                                                            <PackageMinus size={24} />
                                                         </div>
                                                         <h4 className="font-black text-[var(--text-main)] text-lg mb-2">Zero Inventory Counts</h4>
                                                         <p className="text-sm font-medium text-[var(--text-muted)] leading-relaxed">Reset the quantity of all parts in the database to 0. Extremely useful for starting a fresh annual stock audit.</p>
                                                     </div>
-                                                    <button 
-                                                        onClick={() => { setDangerAction('inventory'); setDangerInput(''); }} 
+                                                    <button
+                                                        onClick={() => { setDangerAction('inventory'); setDangerInput(''); }}
                                                         className="btn w-full bg-red-50 hover:bg-red-600 text-red-600 hover:text-white dark:bg-red-900/20 dark:hover:bg-red-600 border border-red-200 dark:border-red-800/50 hover:border-transparent shadow-sm hover:shadow-lg hover:shadow-red-500/30 transition-all h-12 text-sm font-bold gap-2"
                                                     >
                                                         <RotateCcw size={18} /> Reset Inventory
@@ -515,7 +485,7 @@ export default function Settings() {
                             <div className="text-center mb-6">
                                 <h3 className="text-2xl font-black text-[var(--text-main)] mb-2">Are you absolutely sure?</h3>
                                 <p className="text-sm font-medium text-[var(--text-muted)] leading-relaxed px-2">
-                                    {dangerAction === 'tickets' 
+                                    {dangerAction === 'tickets'
                                         ? "This will PERMANENTLY delete all completed tickets older than 90 days. This action cannot be undone."
                                         : "This will immediately set EVERY item's quantity to 0 in your inventory database. This action cannot be undone."
                                     }
@@ -525,8 +495,8 @@ export default function Settings() {
                                 <label className="label text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] justify-center">
                                     Type <span className="text-red-500 mx-1">{dangerAction === 'tickets' ? 'DELETE 90' : 'ZERO STOCK'}</span> to confirm
                                 </label>
-                                <input 
-                                    type="text" 
+                                <input
+                                    type="text"
                                     className="input input-bordered w-full h-14 bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-center font-black tracking-widest uppercase focus:border-red-500 focus:ring-4 focus:ring-red-500/10 transition-all text-lg"
                                     value={dangerInput}
                                     onChange={(e) => setDangerInput(e.target.value)}
@@ -535,9 +505,9 @@ export default function Settings() {
                             </div>
                             <div className="grid grid-cols-2 gap-3">
                                 <button onClick={() => setDangerAction(null)} disabled={isExecutingDanger} className="btn btn-ghost h-14 font-bold text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] border border-[var(--border-color)] transition-all">Cancel</button>
-                                <button 
-                                    onClick={handleExecuteDanger} 
-                                    disabled={isExecutingDanger || dangerInput !== (dangerAction === 'tickets' ? 'DELETE 90' : 'ZERO STOCK')} 
+                                <button
+                                    onClick={handleExecuteDanger}
+                                    disabled={isExecutingDanger || dangerInput !== (dangerAction === 'tickets' ? 'DELETE 90' : 'ZERO STOCK')}
                                     className="btn btn-error h-14 text-white font-black shadow-lg shadow-red-500/30 border-none bg-gradient-to-br from-red-600 to-red-500 hover:scale-105 transition-transform disabled:opacity-50 disabled:grayscale disabled:hover:scale-100"
                                 >
                                     {isExecutingDanger ? <span className="loading loading-spinner"></span> : "Execute"}

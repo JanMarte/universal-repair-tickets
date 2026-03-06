@@ -3,24 +3,25 @@ import { supabase } from '../supabaseClient';
 import TicketCard from '../components/TicketCard';
 import IntakeModal from '../components/IntakeModal';
 import KanbanBoard from '../components/KanbanBoard';
+import Navbar from '../components/Navbar';
 import { useNavigate } from 'react-router-dom';
+import { formatCurrency } from '../utils';
 import {
-  Search, Filter, Moon, Sun, Plus, XCircle, LogOut, Users, QrCode,
+  Search, Filter, Plus, XCircle, QrCode,
   AlertTriangle, DollarSign, Activity, ChevronDown, ChevronUp, Layers, UserCheck,
-  Package, LayoutGrid, List as ListIcon, Wrench, Settings as SettingsIcon // <--- Added SettingsIcon
+  LayoutGrid, List as ListIcon, BarChart3, TrendingUp, Clock, Target, PieChart,
+  CalendarDays, Trophy, Medal, ThumbsUp, Cpu
 } from 'lucide-react';
-import { useToast } from '../context/ToastProvider';
 import QRScanner from '../components/QRScanner';
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { addToast } = useToast();
 
-  const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light');
   const [isIntakeModalOpen, setIsIntakeModalOpen] = useState(false);
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // Note: currentUser is still needed here for filtering "My Work" and checking management role for analytics
   const [currentUser, setCurrentUser] = useState({ id: null, email: '', role: '', initial: '?' });
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -32,18 +33,16 @@ export default function Dashboard() {
     return localStorage.getItem('dashboardViewMode') || 'list';
   });
 
+  const [analyticsTimeframe, setAnalyticsTimeframe] = useState('this_month');
+
   useEffect(() => {
     localStorage.setItem('dashboardViewMode', viewMode);
   }, [viewMode]);
 
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-    if (theme === 'dark') document.documentElement.classList.add('dark');
-    else document.documentElement.classList.remove('dark');
-
     fetchUserData();
     fetchTickets();
-  }, [theme]);
+  }, []);
 
   async function fetchUserData() {
     const { data: { user } } = await supabase.auth.getUser();
@@ -70,12 +69,6 @@ export default function Dashboard() {
     setLoading(false);
   }
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    addToast("Logged out successfully", "info");
-    navigate('/login');
-  };
-
   const isManagement = ['manager', 'admin'].includes(currentUser.role);
 
   const filteredTickets = tickets.filter(ticket => {
@@ -100,12 +93,6 @@ export default function Dashboard() {
     const matchesStatus = statusFilter === 'ALL' || ticket.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
-
-  const toggleTheme = () => {
-    const newTheme = theme === 'light' ? 'dark' : 'light';
-    setTheme(newTheme);
-    localStorage.setItem('theme', newTheme);
-  };
 
   const activeCount = tickets.filter(t => t.status !== 'completed').length;
   const urgentCount = tickets.filter(t => t.is_backordered || t.status === 'waiting_parts').length;
@@ -134,139 +121,126 @@ export default function Dashboard() {
     setSearchQuery('');
   };
 
+  // ==========================================
+  // --- ENTERPRISE ANALYTICS ENGINE MATH ---
+  // ==========================================
+
+  const now = new Date();
+  const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+  const startOfThisYear = new Date(now.getFullYear(), 0, 1);
+
+  const isInTimeframe = (dateString) => {
+    if (!dateString) return false;
+    const d = new Date(dateString);
+    if (analyticsTimeframe === 'lifetime') return true;
+    if (analyticsTimeframe === 'this_month') return d >= startOfThisMonth;
+    if (analyticsTimeframe === 'last_month') return d >= startOfLastMonth && d <= endOfLastMonth;
+    if (analyticsTimeframe === 'this_year') return d >= startOfThisYear;
+    return true;
+  };
+
+  const periodTickets = tickets.filter(t => isInTimeframe(t.created_at));
+  const periodCompleted = tickets.filter(t => t.status === 'completed' && isInTimeframe(t.updated_at));
+  const activeTicketsSnapshot = tickets.filter(t => t.status !== 'completed');
+
+  const completedRevenueCalc = periodCompleted.reduce((sum, t) => sum + (t.estimate_total || 0), 0);
+  const activeRevenueCalc = activeTicketsSnapshot.reduce((sum, t) => sum + (t.estimate_total || 0), 0);
+  const volumeCalc = periodTickets.length;
+
+  let turnaroundText = 'N/A';
+  if (periodCompleted.length > 0) {
+    const totalMs = periodCompleted.reduce((sum, t) => sum + Math.max(0, new Date(t.updated_at).getTime() - new Date(t.created_at).getTime()), 0);
+    const avgTurnaround = totalMs / periodCompleted.length;
+    const avgDays = Math.floor(avgTurnaround / (1000 * 60 * 60 * 24));
+    const avgHours = Math.floor((avgTurnaround % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    turnaroundText = avgDays > 0 ? `${avgDays}d ${avgHours}h` : `${avgHours}h`;
+  }
+
+  const approvedCount = periodTickets.filter(t => t.estimate_status === 'approved').length;
+  const declinedCount = periodTickets.filter(t => t.estimate_status === 'declined').length;
+  const totalEstimates = approvedCount + declinedCount;
+  const winRate = totalEstimates > 0 ? Math.round((approvedCount / totalEstimates) * 100) : 0;
+
+  const techStats = {};
+  tickets.forEach(t => {
+    const name = t.assignee_name;
+    if (!name) return;
+    if (!techStats[name]) techStats[name] = { name, active: 0, completed: 0, revenue: 0 };
+
+    if (t.status !== 'completed') {
+      techStats[name].active += 1;
+    } else if (isInTimeframe(t.updated_at)) {
+      techStats[name].completed += 1;
+      techStats[name].revenue += (t.estimate_total || 0);
+    }
+  });
+  const leaderboard = Object.values(techStats)
+    .filter(t => t.active > 0 || t.completed > 0)
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 4);
+
+  const brandStats = {};
+  periodTickets.forEach(t => {
+    if (!t.brand) return;
+    const brand = t.brand.trim().toUpperCase();
+    brandStats[brand] = (brandStats[brand] || 0) + 1;
+  });
+  const topBrands = Object.entries(brandStats)
+    .map(([brand, count]) => ({ brand, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5);
+  const maxBrandCount = topBrands.length > 0 ? topBrands[0].count : 1;
+
+  const statusCounts = {
+    intake: activeTicketsSnapshot.filter(t => t.status === 'intake').length,
+    diagnosing: activeTicketsSnapshot.filter(t => t.status === 'diagnosing').length,
+    waiting_parts: activeTicketsSnapshot.filter(t => t.status === 'waiting_parts').length,
+    repairing: activeTicketsSnapshot.filter(t => t.status === 'repairing').length,
+    ready_pickup: activeTicketsSnapshot.filter(t => t.status === 'ready_pickup').length
+  };
+  const maxStatusCount = Math.max(...Object.values(statusCounts)) || 1;
+
+  const PipelineBar = ({ label, count, max, color }) => (
+    <div className="mb-3">
+      <div className="flex justify-between text-[10px] font-black uppercase tracking-widest mb-1.5">
+        <span className="text-[var(--text-muted)]">{label}</span>
+        <span className="text-[var(--text-main)]">{count}</span>
+      </div>
+      <div className="w-full bg-[var(--bg-subtle)] rounded-full h-2.5 shadow-inner border border-[var(--border-color)] overflow-hidden">
+        <div className={`h-full rounded-full ${color} shadow-sm transition-all duration-1000`} style={{ width: `${count > 0 ? Math.max(2, (count / max) * 100) : 0}%` }}></div>
+      </div>
+    </div>
+  );
+
+  // --- DASHBOARD SPECIFIC ACTIONS TO INJECT INTO NAVBAR ---
+  const dashboardActions = (
+    <>
+      <button className="btn btn-sm btn-circle btn-ghost text-[var(--text-muted)] hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all" onClick={() => setIsScanning(true)} title="Scan QR Code">
+        <QrCode size={20} />
+      </button>
+      <button className="btn btn-sm md:btn-md btn-gradient text-white rounded-full shadow-lg hover:shadow-indigo-500/40 border-none px-4 md:px-6 hover:scale-105 transition-all ml-1" onClick={() => setIsIntakeModalOpen(true)}>
+        <Plus size={18} strokeWidth={3} /> <span className="hidden md:inline font-bold">New Ticket</span>
+      </button>
+    </>
+  );
+
   return (
     <div className="min-h-screen p-4 md:p-6 font-sans transition-colors duration-300 pb-20">
 
-      {/* NAVBAR */}
-      <div className="navbar rounded-2xl mb-6 sticky top-2 z-40 animate-fade flex justify-between shadow-sm backdrop-blur-md bg-[var(--bg-surface)] border border-[var(--border-color)] px-3 py-2">
-
-        {/* PREMIUM BRANDING */}
-        <div
-          onClick={() => {
-            if (['employee', 'manager', 'admin'].includes(currentUser.role)) {
-              navigate('/');
-            } else {
-              navigate('/my-tickets');
-            }
-          }}
-          className="flex-1 min-w-0 flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity group"
-          title="Go to Home"
-        >
-          <div className="hidden sm:flex w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl items-center justify-center text-white shadow-lg shadow-indigo-500/20 group-hover:scale-105 transition-transform">
-            <Wrench size={20} fill="currentColor" />
-          </div>
-          <div className="flex flex-col justify-center leading-tight">
-            <span className="font-black text-[var(--text-main)] text-lg md:text-2xl whitespace-nowrap tracking-tight">
-              University <span className="text-indigo-500">Vacuum & Sewing</span>
-            </span>
-          </div>
-        </div>
-
-        <div className="flex-none flex items-center gap-1 sm:gap-2">
-          <button className="btn btn-sm btn-circle btn-ghost text-[var(--text-muted)] hover:text-indigo-500 hover:bg-[var(--bg-subtle)] transition-colors" onClick={() => setIsScanning(true)} title="Scan QR Code">
-            <QrCode size={20} />
-          </button>
-
-          <button className="btn btn-sm btn-ghost rounded-full px-4 gap-2 text-[var(--text-muted)] font-bold hidden md:flex hover:bg-[var(--bg-subtle)] hover:text-[var(--text-main)] transition-colors" onClick={() => navigate('/customers')}>
-            <Users size={18} /> Customers
-          </button>
-
-          <button className="btn btn-sm btn-ghost rounded-full px-4 gap-2 text-[var(--text-muted)] font-bold hidden md:flex hover:bg-[var(--bg-subtle)] hover:text-[var(--text-main)] transition-colors" onClick={() => navigate('/inventory')}>
-            <Package size={18} /> Inventory
-          </button>
-
-          <button className="btn btn-sm md:btn-md btn-gradient text-white rounded-full shadow-lg hover:shadow-indigo-500/40 border-none px-4 md:px-6 hover:scale-105 transition-all ml-1" onClick={() => setIsIntakeModalOpen(true)}>
-            <Plus size={18} strokeWidth={3} /> <span className="hidden md:inline font-bold">New Ticket</span>
-          </button>
-
-          <button className="btn btn-sm btn-ghost btn-circle text-[var(--text-muted)] hover:text-indigo-500 hover:bg-[var(--bg-subtle)] transition-colors" onClick={toggleTheme} title="Toggle Theme">
-            {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
-          </button>
-
-          {/* --- UPGRADED PROFILE DROPDOWN --- */}
-          <div className="dropdown dropdown-end ml-1">
-            <div tabIndex={0} role="button" className="btn btn-sm btn-ghost btn-circle avatar placeholder hover:bg-transparent border-none">
-              <div className="bg-[var(--bg-subtle)] text-indigo-600 dark:text-indigo-400 border border-[var(--border-color)] rounded-full w-9 h-9 shadow-inner hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:border-indigo-200 transition-all flex items-center justify-center">
-                <span className="text-sm font-black">{currentUser.initial}</span>
-              </div>
-            </div>
-
-            <ul tabIndex={0} className="mt-4 z-[50] p-3 shadow-2xl menu menu-sm dropdown-content rounded-2xl w-64 bg-[var(--bg-surface)] border border-[var(--border-color)] animate-pop">
-
-              {/* Premium ID Card Header */}
-              <div className="p-3.5 bg-[var(--bg-subtle)] rounded-xl border border-[var(--border-color)] shadow-inner mb-3 flex flex-col gap-1.5">
-                <span className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)]">Signed in as</span>
-                <span className="font-bold text-sm truncate w-full text-[var(--text-main)] leading-tight">{currentUser.email}</span>
-                <div className="flex mt-1.5">
-                  <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest shadow-md ${currentUser.role === 'admin' ? 'bg-purple-500 text-white shadow-purple-500/30' :
-                    currentUser.role === 'manager' ? 'bg-indigo-500 text-white shadow-indigo-500/30' :
-                      'bg-slate-500 text-white shadow-slate-500/30'
-                    }`}>
-                    {currentUser.role}
-                  </span>
-                </div>
-              </div>
-
-              {/* Mobile Only Navigation */}
-              <li className="md:hidden">
-                <button onClick={() => navigate('/customers')} className="font-bold text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-subtle)] py-2.5 rounded-lg transition-all">
-                  <Users size={16} className="text-indigo-500" /> Customer Database
-                </button>
-              </li>
-              <li className="md:hidden">
-                <button onClick={() => navigate('/inventory')} className="font-bold text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-subtle)] py-2.5 rounded-lg transition-all">
-                  <Package size={16} className="text-indigo-500" /> Inventory
-                </button>
-              </li>
-
-              {/* Management Team Button */}
-              {isManagement && (
-                <li>
-                  <button onClick={() => navigate('/team')} className="font-bold text-[var(--text-muted)] hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 py-2.5 rounded-lg transition-all">
-                    <Users size={16} className="text-indigo-500" /> Manage Team
-                  </button>
-                </li>
-              )}
-
-              {/* Settings Action */}
-              <li>
-                <button onClick={() => navigate('/settings')} className="font-bold text-[var(--text-muted)] hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 py-2.5 rounded-lg transition-all">
-                  <SettingsIcon size={16} className="text-indigo-500" /> Settings
-                </button>
-              </li>
-
-              {/* Dashed Divider */}
-              <div className="border-t-2 border-dashed border-[var(--border-color)] my-2 mx-1"></div>
-
-              {/* Logout Action */}
-              <li>
-                <button onClick={handleLogout} className="font-bold text-[var(--text-muted)] hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 py-2.5 rounded-lg transition-all">
-                  <LogOut size={16} className="text-red-500" /> Logout
-                </button>
-              </li>
-            </ul>
-          </div>
-        </div>
-      </div>
+      {/* USING THE NEW GLOBAL NAVBAR COMPONENT */}
+      <Navbar rightActions={dashboardActions} />
 
       {/* MOBILE FILTERS */}
       <div className="lg:hidden mb-6 relative z-30">
         <div className="flex gap-2 relative">
           <div className="relative flex-1 group">
-            <input
-              type="text"
-              placeholder="Search tickets..."
-              className="input input-bordered w-full pl-12 pr-10 rounded-full shadow-sm bg-[var(--bg-subtle)] text-[var(--text-main)] focus:bg-[var(--bg-surface)] focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all font-medium h-12"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+            <input type="text" placeholder="Search tickets..." className="input input-bordered w-full pl-12 pr-10 rounded-full shadow-sm bg-[var(--bg-subtle)] text-[var(--text-main)] focus:bg-[var(--bg-surface)] focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all font-medium h-12" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)] group-focus-within:text-indigo-500 transition-colors" size={18} />
             {searchQuery && <button onClick={() => setSearchQuery('')} className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-red-500 transition-colors"><XCircle size={18} /></button>}
           </div>
-          <button
-            onClick={() => setIsMobileFilterOpen(!isMobileFilterOpen)}
-            className={`btn rounded-full px-5 h-12 transition-all ${isMobileFilterOpen ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30 border-none hover:scale-105 hover:bg-indigo-700' : 'btn-ghost bg-[var(--bg-surface)] border border-[var(--border-color)] hover:bg-[var(--bg-subtle)]'}`}
-          >
+          <button onClick={() => setIsMobileFilterOpen(!isMobileFilterOpen)} className={`btn rounded-full px-5 h-12 transition-all ${isMobileFilterOpen ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30 border-none hover:scale-105 hover:bg-indigo-700' : 'btn-ghost bg-[var(--bg-surface)] border border-[var(--border-color)] hover:bg-[var(--bg-subtle)]'}`}>
             <Filter size={18} />
             {isMobileFilterOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
           </button>
@@ -313,7 +287,7 @@ export default function Dashboard() {
       {/* DYNAMIC GRID */}
       <div className={`grid grid-cols-1 ${viewMode === 'list' ? 'lg:grid-cols-4' : ''} gap-8 animate-fade`}>
 
-        {/* SIDEBAR FILTERS (Only visible in List View) */}
+        {/* SIDEBAR FILTERS */}
         {viewMode === 'list' && (
           <div className="hidden lg:block lg:col-span-1">
             <div className="sticky top-28 rounded-2xl shadow-sm bg-[var(--bg-surface)] border border-[var(--border-color)]">
@@ -322,10 +296,7 @@ export default function Dashboard() {
                   <h3 className="font-black text-[var(--text-main)] flex gap-2 items-center text-lg"><Filter size={20} className="text-indigo-500" /> Filters</h3>
 
                   {(statusFilter !== 'ALL' || searchQuery) && (
-                    <button
-                      onClick={clearFilters}
-                      className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-[var(--text-muted)] hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 border border-transparent hover:border-red-200 dark:hover:border-red-900/30 px-2 py-1 rounded-md transition-all"
-                    >
+                    <button onClick={clearFilters} className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-[var(--text-muted)] hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 border border-transparent hover:border-red-200 dark:hover:border-red-900/30 px-2 py-1 rounded-md transition-all">
                       <XCircle size={14} /> Clear
                     </button>
                   )}
@@ -383,7 +354,7 @@ export default function Dashboard() {
                   <div onClick={() => setStatusFilter('ALL')} className={`flex items-center justify-between p-4 rounded-xl cursor-pointer transition-all duration-300 border ${statusFilter === 'ALL' ? 'bg-cyan-50 dark:bg-cyan-500/10 border-cyan-300 dark:border-cyan-500/50 shadow-md ring-1 ring-cyan-500/20 scale-[1.02]' : 'bg-[var(--bg-subtle)] border-[var(--border-color)] hover:border-cyan-300 dark:hover:border-cyan-600 hover:shadow-md hover:-translate-y-0.5'}`}>
                     <div>
                       <div className={`text-[10px] font-black uppercase tracking-widest mb-0.5 ${statusFilter === 'ALL' ? 'text-cyan-600 dark:text-cyan-400' : 'text-[var(--text-muted)]'}`}>Est. Revenue</div>
-                      <div className={`text-2xl font-black tracking-tight ${statusFilter === 'ALL' ? 'text-cyan-700 dark:text-cyan-300' : 'text-[var(--text-main)]'}`}>${totalRevenue.toLocaleString()}</div>
+                      <div className={`text-2xl font-black tracking-tight ${statusFilter === 'ALL' ? 'text-cyan-700 dark:text-cyan-300' : 'text-[var(--text-main)]'}`}>{formatCurrency(totalRevenue)}</div>
                     </div>
                     <div className={`p-2.5 rounded-xl shadow-sm transition-colors ${statusFilter === 'ALL' ? 'bg-cyan-500 text-white' : 'bg-white dark:bg-slate-800 text-cyan-500 border border-[var(--border-color)]'}`}><DollarSign size={20} /></div>
                   </div>
@@ -398,21 +369,39 @@ export default function Dashboard() {
 
           <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between bg-[var(--bg-surface)] p-3 px-4 rounded-xl border border-[var(--border-color)] shadow-sm gap-4 transition-all">
             <div className="flex items-center gap-3 flex-wrap">
-
               <div className="flex items-center gap-1.5 text-[var(--text-muted)] bg-[var(--bg-subtle)] px-2.5 py-1.5 rounded-md shadow-inner border border-[var(--border-color)]">
                 <Layers size={14} />
-                <span className="text-[10px] font-black uppercase tracking-widest">Viewing</span>
+                <span className="text-[10px] font-black uppercase tracking-widest">
+                  {viewMode === 'analytics' ? 'Dashboard' : 'Viewing'}
+                </span>
               </div>
 
-              <div className={getFilterBadgeStyle(statusFilter)}>
-                {statusFilter === 'BACKORDER' ? 'WAITING (PARTS)' : statusFilter.replace('_', ' ')}
-              </div>
+              {viewMode !== 'analytics' ? (
+                <div className={getFilterBadgeStyle(statusFilter)}>
+                  {statusFilter === 'BACKORDER' ? 'WAITING (PARTS)' : statusFilter.replace('_', ' ')}
+                </div>
+              ) : (
+                // --- CUSTOM TIMEFRAME DROPDOWN ---
+                <div className="dropdown">
+                  <div tabIndex={0} role="button" className="btn btn-sm h-8 bg-indigo-500 hover:bg-indigo-600 text-white border-none shadow-md flex justify-between items-center px-4 transition-all w-36">
+                    <span className="font-black uppercase tracking-widest text-[10px] truncate">
+                      {analyticsTimeframe.replace('_', ' ')}
+                    </span>
+                    <ChevronDown size={14} className="opacity-80 flex-none" />
+                  </div>
+                  <ul tabIndex={0} className="dropdown-content z-[60] menu p-2 shadow-2xl bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl w-48 mt-2 animate-pop">
+                    <li className="menu-title text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] px-2 py-1">Timeframe</li>
+                    <li><button onClick={(e) => { setAnalyticsTimeframe('this_month'); e.currentTarget.blur(); }} className={`font-bold py-2.5 rounded-lg ${analyticsTimeframe === 'this_month' ? 'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/20 dark:text-indigo-400' : 'text-[var(--text-main)] hover:bg-[var(--bg-subtle)]'}`}><CalendarDays size={14} className="mr-1" /> This Month</button></li>
+                    <li><button onClick={(e) => { setAnalyticsTimeframe('last_month'); e.currentTarget.blur(); }} className={`font-bold py-2.5 rounded-lg ${analyticsTimeframe === 'last_month' ? 'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/20 dark:text-indigo-400' : 'text-[var(--text-main)] hover:bg-[var(--bg-subtle)]'}`}><CalendarDays size={14} className="mr-1" /> Last Month</button></li>
+                    <li><button onClick={(e) => { setAnalyticsTimeframe('this_year'); e.currentTarget.blur(); }} className={`font-bold py-2.5 rounded-lg ${analyticsTimeframe === 'this_year' ? 'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/20 dark:text-indigo-400' : 'text-[var(--text-main)] hover:bg-[var(--bg-subtle)]'}`}><CalendarDays size={14} className="mr-1" /> This Year</button></li>
+                    <div className="border-t border-dashed border-[var(--border-color)] my-1"></div>
+                    <li><button onClick={(e) => { setAnalyticsTimeframe('lifetime'); e.currentTarget.blur(); }} className={`font-bold py-2.5 rounded-lg ${analyticsTimeframe === 'lifetime' ? 'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/20 dark:text-indigo-400' : 'text-[var(--text-main)] hover:bg-[var(--bg-subtle)]'}`}><Target size={14} className="mr-1" /> Lifetime</button></li>
+                  </ul>
+                </div>
+              )}
 
-              {(statusFilter !== 'ALL' || searchQuery) && (
-                <button
-                  onClick={clearFilters}
-                  className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-[var(--text-muted)] hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 border border-transparent hover:border-red-200 dark:hover:border-red-900/30 px-2.5 py-1.5 rounded-md transition-all ml-1"
-                >
+              {viewMode !== 'analytics' && (statusFilter !== 'ALL' || searchQuery) && (
+                <button onClick={clearFilters} className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-[var(--text-muted)] hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 border border-transparent hover:border-red-200 dark:hover:border-red-900/30 px-2.5 py-1.5 rounded-md transition-all ml-1">
                   <XCircle size={14} /> Clear
                 </button>
               )}
@@ -420,24 +409,14 @@ export default function Dashboard() {
 
             <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
 
-              {/* --- KANBAN SPECIFIC FILTERS --- */}
+              {/* KANBAN SPECIFIC FILTERS */}
               {viewMode === 'board' && (
                 <div className="hidden md:flex items-center gap-2 mr-2">
                   <div className="relative group">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] group-focus-within:text-indigo-500 transition-colors" size={14} />
-                    <input
-                      type="text"
-                      className="input input-sm h-9 w-48 pl-9 bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] shadow-inner border-[var(--border-color)] focus:border-indigo-500 transition-all font-medium text-xs rounded-lg"
-                      placeholder="Search board..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                    />
+                    <input type="text" className="input input-sm h-9 w-48 pl-9 bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] shadow-inner border-[var(--border-color)] focus:border-indigo-500 transition-all font-medium text-xs rounded-lg" placeholder="Search board..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
                   </div>
-                  <select
-                    className="select select-sm h-9 bg-[var(--bg-subtle)] border-[var(--border-color)] text-[var(--text-main)] text-[10px] font-black uppercase tracking-widest shadow-inner focus:border-indigo-500 rounded-lg"
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
-                  >
+                  <select className="select select-sm h-9 bg-[var(--bg-subtle)] border-[var(--border-color)] text-[var(--text-main)] text-[10px] font-black uppercase tracking-widest shadow-inner focus:border-indigo-500 rounded-lg" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
                     <option value="ALL">All Tickets</option>
                     <option value="ACTIVE">Active Workload</option>
                     <option value="MY_WORK">My Repairs</option>
@@ -448,20 +427,11 @@ export default function Dashboard() {
 
               {/* VIEW TOGGLES */}
               <div className="bg-[var(--bg-subtle)] border border-[var(--border-color)] p-1 rounded-lg flex gap-1 shadow-inner flex-none">
-                <button
-                  onClick={() => setViewMode('list')}
-                  className={`flex items-center justify-center p-1.5 px-3 rounded-md transition-all ${viewMode === 'list' ? 'bg-[var(--bg-surface)] text-indigo-600 dark:text-indigo-400 shadow-sm ring-1 ring-black/5 dark:ring-white/5' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
-                  title="List View"
-                >
-                  <ListIcon size={16} />
-                </button>
-                <button
-                  onClick={() => setViewMode('board')}
-                  className={`flex items-center justify-center p-1.5 px-3 rounded-md transition-all ${viewMode === 'board' ? 'bg-[var(--bg-surface)] text-indigo-600 dark:text-indigo-400 shadow-sm ring-1 ring-black/5 dark:ring-white/5' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
-                  title="Kanban Board View"
-                >
-                  <LayoutGrid size={16} />
-                </button>
+                <button onClick={() => setViewMode('list')} className={`flex items-center justify-center p-1.5 px-3 rounded-md transition-all ${viewMode === 'list' ? 'bg-[var(--bg-surface)] text-indigo-600 dark:text-indigo-400 shadow-sm ring-1 ring-black/5 dark:ring-white/5' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`} title="List View"><ListIcon size={16} /></button>
+                <button onClick={() => setViewMode('board')} className={`flex items-center justify-center p-1.5 px-3 rounded-md transition-all ${viewMode === 'board' ? 'bg-[var(--bg-surface)] text-indigo-600 dark:text-indigo-400 shadow-sm ring-1 ring-black/5 dark:ring-white/5' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`} title="Kanban Board View"><LayoutGrid size={16} /></button>
+                {isManagement && (
+                  <button onClick={() => setViewMode('analytics')} className={`flex items-center justify-center p-1.5 px-3 rounded-md transition-all ${viewMode === 'analytics' ? 'bg-[var(--bg-surface)] text-indigo-600 dark:text-indigo-400 shadow-sm ring-1 ring-black/5 dark:ring-white/5' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`} title="Analytics & Metrics"><BarChart3 size={16} /></button>
+                )}
               </div>
             </div>
           </div>
@@ -470,12 +440,144 @@ export default function Dashboard() {
             <div className="flex justify-center mt-20"><span className="loading loading-spinner loading-lg text-primary"></span></div>
           ) : (
             <>
-              {viewMode === 'board' ? (
+              {/* ======================================= */}
+              {/* --- UPGRADED ENTERPRISE ANALYTICS --- */}
+              {/* ======================================= */}
+              {viewMode === 'analytics' ? (
+                <div className="space-y-6 animate-fade-in-up">
+
+                  {/* TOP 4 METRIC CARDS */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+
+                    <div className="bg-[var(--bg-surface)] p-5 rounded-2xl border border-[var(--border-color)] shadow-sm relative overflow-hidden group hover:border-emerald-300 dark:hover:border-emerald-800 transition-colors">
+                      <div className="absolute -right-4 -top-4 text-emerald-500/10 group-hover:scale-110 transition-transform"><TrendingUp size={80} /></div>
+                      <div className="relative z-10">
+                        <div className="flex justify-between items-start mb-4">
+                          <div className="p-2.5 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded-xl shadow-inner border border-emerald-100 dark:border-emerald-800"><TrendingUp size={18} /></div>
+                        </div>
+                        <h3 className="text-2xl font-black text-[var(--text-main)] tracking-tight mb-1">{formatCurrency(completedRevenueCalc)}</h3>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">Realized Revenue</p>
+                      </div>
+                    </div>
+
+                    <div className="bg-[var(--bg-surface)] p-5 rounded-2xl border border-[var(--border-color)] shadow-sm relative overflow-hidden group hover:border-purple-300 dark:hover:border-purple-800 transition-colors">
+                      <div className="absolute -right-4 -top-4 text-purple-500/10 group-hover:scale-110 transition-transform"><Target size={80} /></div>
+                      <div className="relative z-10">
+                        <div className="flex justify-between items-start mb-4">
+                          <div className="p-2.5 bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 rounded-xl shadow-inner border border-purple-100 dark:border-purple-800"><Target size={18} /></div>
+                        </div>
+                        <h3 className="text-2xl font-black text-[var(--text-main)] tracking-tight mb-1">{volumeCalc}</h3>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">Tickets Created</p>
+                      </div>
+                    </div>
+
+                    <div className="bg-[var(--bg-surface)] p-5 rounded-2xl border border-[var(--border-color)] shadow-sm relative overflow-hidden group hover:border-blue-300 dark:hover:border-blue-800 transition-colors">
+                      <div className="absolute -right-4 -top-4 text-blue-500/10 group-hover:scale-110 transition-transform"><Clock size={80} /></div>
+                      <div className="relative z-10">
+                        <div className="flex justify-between items-start mb-4">
+                          <div className="p-2.5 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-xl shadow-inner border border-blue-100 dark:border-blue-800"><Clock size={18} /></div>
+                        </div>
+                        <h3 className="text-2xl font-black text-[var(--text-main)] tracking-tight mb-1">{turnaroundText}</h3>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">Avg Turnaround</p>
+                      </div>
+                    </div>
+
+                    <div className="bg-[var(--bg-surface)] p-5 rounded-2xl border border-[var(--border-color)] shadow-sm relative overflow-hidden group hover:border-amber-300 dark:hover:border-amber-800 transition-colors">
+                      <div className="absolute -right-4 -top-4 text-amber-500/10 group-hover:scale-110 transition-transform"><ThumbsUp size={80} /></div>
+                      <div className="relative z-10">
+                        <div className="flex justify-between items-start mb-4">
+                          <div className="p-2.5 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 rounded-xl shadow-inner border border-amber-100 dark:border-amber-800"><ThumbsUp size={18} /></div>
+                          {totalEstimates > 0 && <span className="text-[9px] font-black text-[var(--text-muted)] bg-[var(--bg-subtle)] border border-[var(--border-color)] px-1.5 py-0.5 rounded shadow-inner">{totalEstimates} Sent</span>}
+                        </div>
+                        <h3 className="text-2xl font-black text-[var(--text-main)] tracking-tight mb-1">{winRate}%</h3>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">Estimate Win Rate</p>
+                      </div>
+                    </div>
+
+                  </div>
+
+                  {/* GRIDS: Leaderboard, Brands, Pipeline */}
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+                    {/* --- TECHNICIAN LEADERBOARD --- */}
+                    <div className="bg-[var(--bg-surface)] p-6 rounded-2xl border border-[var(--border-color)] shadow-sm flex flex-col h-full">
+                      <h3 className="text-xs font-black uppercase tracking-widest text-[var(--text-main)] mb-5 flex items-center gap-2 border-b border-[var(--border-color)] pb-3">
+                        <Trophy size={16} className="text-yellow-500" /> Tech Leaderboard
+                      </h3>
+                      <div className="space-y-4 flex-1">
+                        {leaderboard.length === 0 ? (
+                          <div className="text-center text-[var(--text-muted)] text-sm py-8 font-medium">No completions recorded.</div>
+                        ) : (
+                          leaderboard.map((tech, idx) => (
+                            <div key={tech.name} className="flex items-center gap-3 p-3 bg-[var(--bg-subtle)] rounded-xl border border-[var(--border-color)] shadow-inner relative overflow-hidden">
+                              {idx === 0 && <div className="absolute top-0 right-0 w-8 h-8 bg-yellow-400/20 rounded-bl-full flex items-start justify-end pr-1 pt-1"><Medal size={12} className="text-yellow-600" /></div>}
+
+                              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-xs shadow-md border ${idx === 0 ? 'bg-gradient-to-br from-yellow-400 to-yellow-600 text-white border-yellow-300' : 'bg-[var(--bg-surface)] text-[var(--text-muted)] border-[var(--border-color)]'}`}>
+                                {tech.name.substring(0, 2).toUpperCase()}
+                              </div>
+
+                              <div className="flex-1 min-w-0">
+                                <div className="font-black text-sm text-[var(--text-main)] truncate">{tech.name}</div>
+                                <div className="text-[9px] font-bold text-[var(--text-muted)] uppercase tracking-widest flex items-center gap-2 mt-0.5">
+                                  <span>{tech.completed} Closed</span> •
+                                  <span className={`${tech.active > 5 ? 'text-amber-500' : ''}`}>{tech.active} Active</span>
+                                </div>
+                              </div>
+
+                              <div className="text-right">
+                                <div className="text-sm font-black text-emerald-600 dark:text-emerald-400">{formatCurrency(tech.revenue)}</div>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+
+                    {/* --- TOP BRANDS --- */}
+                    <div className="bg-[var(--bg-surface)] p-6 rounded-2xl border border-[var(--border-color)] shadow-sm flex flex-col h-full">
+                      <h3 className="text-xs font-black uppercase tracking-widest text-[var(--text-main)] mb-5 flex items-center gap-2 border-b border-[var(--border-color)] pb-3">
+                        <Cpu size={16} className="text-indigo-500" /> Top Device Brands
+                      </h3>
+                      <div className="space-y-5 mt-1 flex-1">
+                        {topBrands.length === 0 ? (
+                          <div className="text-center text-[var(--text-muted)] text-sm py-8 font-medium">No devices logged.</div>
+                        ) : (
+                          topBrands.map((brand, idx) => (
+                            <div key={brand.brand}>
+                              <div className="flex justify-between items-center mb-1.5">
+                                <span className="text-[10px] font-black uppercase tracking-widest text-[var(--text-main)] flex items-center gap-1.5">
+                                  <span className="text-[var(--text-muted)] opacity-50">#{idx + 1}</span> {brand.brand}
+                                </span>
+                                <span className="text-xs font-bold text-[var(--text-muted)]">{brand.count}</span>
+                              </div>
+                              <div className="w-full bg-[var(--bg-subtle)] rounded-full h-2 shadow-inner border border-[var(--border-color)] overflow-hidden">
+                                <div className="h-full rounded-full bg-indigo-500 shadow-sm" style={{ width: `${(brand.count / maxBrandCount) * 100}%` }}></div>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+
+                    {/* --- PIPELINE SNAPSHOT --- */}
+                    <div className="bg-[var(--bg-surface)] p-6 rounded-2xl border border-[var(--border-color)] shadow-sm flex flex-col h-full">
+                      <h3 className="text-xs font-black uppercase tracking-widest text-[var(--text-main)] mb-5 flex items-center gap-2 border-b border-[var(--border-color)] pb-3">
+                        <PieChart size={16} className="text-blue-500" /> Active Pipeline Status
+                      </h3>
+                      <div className="space-y-4 mt-2 flex-1">
+                        <PipelineBar label="In Queue (Intake)" count={statusCounts.intake} max={maxStatusCount} color="bg-blue-500" />
+                        <PipelineBar label="Diagnosing" count={statusCounts.diagnosing} max={maxStatusCount} color="bg-purple-500" />
+                        <PipelineBar label="Waiting on Parts" count={statusCounts.waiting_parts} max={maxStatusCount} color="bg-orange-500" />
+                        <PipelineBar label="Repairing" count={statusCounts.repairing} max={maxStatusCount} color="bg-amber-500" />
+                        <PipelineBar label="Ready for Pickup" count={statusCounts.ready_pickup} max={maxStatusCount} color="bg-emerald-500" />
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
+              ) : viewMode === 'board' ? (
                 <div className="overflow-x-auto h-[calc(100vh-250px)] pb-4 custom-scrollbar">
-                  <KanbanBoard
-                    tickets={filteredTickets}
-                    onTicketUpdate={fetchTickets}
-                  />
+                  <KanbanBoard tickets={filteredTickets} onTicketUpdate={fetchTickets} />
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">

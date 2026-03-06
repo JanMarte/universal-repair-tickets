@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
+import { SpeedInsights } from "@vercel/speed-insights/react"
 import UpdatePassword from './pages/UpdatePassword';
 import { ToastProvider } from './context/ToastProvider';
 import PrintLabel from './pages/PrintLabel';
@@ -18,7 +19,8 @@ import Team from './pages/Team';
 import Customers from './pages/Customers';
 import Inventory from './pages/Inventory';
 import PublicStatusPage from './pages/PublicStatusPage';
-import Settings from './pages/Settings'; // <--- Added Settings Import
+import Settings from './pages/Settings';
+import Messages from './pages/Messages';
 
 function App() {
   const [session, setSession] = useState(null);
@@ -107,6 +109,7 @@ function App() {
           <Route path="/customers" element={session && isStaff ? <Customers /> : <Navigate to="/" />} />
           <Route path="/team" element={session && isManagement ? <Team /> : <Navigate to="/" />} />
           <Route path="/update-password" element={<UpdatePassword />} />
+          <Route path="/messages" element={session && isStaff ? <Messages /> : <Navigate to="/" />} />
 
           {/* --- NEW SETTINGS ROUTE (Available to all staff) --- */}
           <Route path="/settings" element={session && isStaff ? <Settings /> : <Navigate to="/" />} />

@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
 import {
-    ArrowLeft, Shield, User, Users, Briefcase, Calendar, Mail,
+    Shield, User, Users, Briefcase, Calendar, Mail,
     Search, UserPlus, X, Copy, CheckCircle, Info, Filter,
-    Activity, DollarSign, Clock, FileText, ChevronRight, Moon, Sun, Wrench
+    Activity, DollarSign, Clock
 } from 'lucide-react';
+import Navbar from '../components/Navbar';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../context/ToastProvider';
 import { format } from 'date-fns';
@@ -15,12 +16,8 @@ export default function Team() {
     const [loading, setLoading] = useState(true);
     const [currentUser, setCurrentUser] = useState(null);
 
-    // Theme State
-    const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light');
-
     // Modal & Search State
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-    const [activeTab, setActiveTab] = useState('search');
     const [searchEmail, setSearchEmail] = useState('');
     const [rosterSearch, setRosterSearch] = useState('');
     const [foundUser, setFoundUser] = useState(null);
@@ -36,15 +33,6 @@ export default function Team() {
 
     const navigate = useNavigate();
     const { addToast } = useToast();
-    const inviteLink = `${window.location.origin}/login`;
-
-    // Handle Theme Changes
-    useEffect(() => {
-        document.documentElement.setAttribute('data-theme', theme);
-        if (theme === 'dark') document.documentElement.classList.add('dark');
-        else document.documentElement.classList.remove('dark');
-        localStorage.setItem('theme', theme);
-    }, [theme]);
 
     useEffect(() => {
         fetchCurrentUser();
@@ -173,10 +161,6 @@ export default function Team() {
         addToast("Copied to clipboard", "success");
     };
 
-    const toggleTheme = () => {
-        setTheme(prev => prev === 'light' ? 'dark' : 'light');
-    };
-
     // Premium Theme Generator for Roles
     const getRoleTheme = (role) => {
         switch (role) {
@@ -272,45 +256,28 @@ export default function Team() {
         );
     };
 
+    // --- ACTIONS TO INJECT INTO GLOBAL NAVBAR ---
+    const teamActions = currentUser?.role === 'admin' ? (
+        <button onClick={() => setIsAddModalOpen(true)} className="btn btn-sm md:btn-md btn-gradient text-white shadow-lg shadow-indigo-500/30 border-none gap-2 hover:scale-105 transition-transform rounded-full px-4 ml-1 flex-none">
+            <UserPlus size={16} strokeWidth={2.5} /> <span className="hidden md:inline font-bold">Add Staff</span>
+        </button>
+    ) : null;
+
     return (
         <div className="min-h-screen p-4 md:p-6 font-sans pb-24 transition-colors duration-300">
+
+            {/* USING THE NEW GLOBAL NAVBAR COMPONENT */}
+            <Navbar rightActions={teamActions} />
+
             <div className="max-w-7xl mx-auto space-y-6">
-
-                {/* PREMIUM NAVBAR */}
-                <div className="navbar rounded-2xl sticky top-2 z-40 flex justify-between shadow-sm backdrop-blur-md bg-[var(--bg-surface)]/90 border border-[var(--border-color)] px-4 py-3 animate-fade-in-up">
-
-                    <div className="flex items-center gap-2">
-                        <button onClick={() => navigate('/')} className="btn btn-sm btn-ghost gap-2 px-3 text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-main)] transition-all rounded-lg group">
-                            <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform duration-300" />
-                            <span className="hidden sm:inline font-bold">Dashboard</span>
-                        </button>
-                    </div>
-
-                    <div
-                        onClick={() => navigate('/')}
-                        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 hidden md:flex items-center gap-2 cursor-pointer group active:scale-95 transition-transform"
-                        title="Return to Dashboard"
-                    >
-                        <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center text-white shadow-md shadow-indigo-500/20 group-hover:scale-110 transition-transform duration-300">
-                            <Wrench size={14} fill="currentColor" />
-                        </div>
-                        <span className="font-black text-[var(--text-main)] text-lg tracking-tight group-hover:opacity-80 transition-opacity">
-                            University <span className="text-indigo-500">Vac & Sew</span>
-                        </span>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                        <button onClick={toggleTheme} className="w-10 h-10 flex items-center justify-center rounded-full bg-[var(--bg-subtle)] border border-[var(--border-color)] shadow-inner text-[var(--text-muted)] hover:text-indigo-500 transition-colors" title="Toggle Theme">
-                            {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
-                        </button>
-                    </div>
-                </div>
 
                 {/* HEADER & SEARCH */}
                 <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-3xl p-6 md:p-8 shadow-sm animate-fade-in-up relative overflow-hidden z-10" style={{ animationDelay: '0.1s' }}>
                     <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500"></div>
 
                     <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
+
+                        {/* Title Section (Left) */}
                         <div>
                             <h1 className="text-3xl font-black text-[var(--text-main)] tracking-tight flex items-center gap-3 mb-2">
                                 <Users className="text-indigo-600" size={32} />
@@ -327,29 +294,34 @@ export default function Team() {
                             </div>
                         </div>
 
-                        <div className="flex gap-3 w-full lg:w-auto items-end">
-                            <div className="flex-1 lg:w-80">
-                                <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] mb-1.5 block pl-1">
+                        {/* Search & Count Section (Right) */}
+                        <div className="w-full lg:w-96 flex flex-col justify-end">
+                            <div className="flex justify-between items-end mb-1.5 pl-1 pr-1">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">
                                     Roster Search
                                 </label>
-                                <div className="relative group">
-                                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-[var(--text-muted)] group-focus-within:text-indigo-500 transition-colors">
-                                        <Search size={18} />
-                                    </div>
-                                    <input
-                                        type="text"
-                                        placeholder="Find staff member..."
-                                        className="input input-bordered w-full h-12 pl-12 bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] font-medium shadow-inner transition-all focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 text-sm rounded-xl"
-                                        value={rosterSearch}
-                                        onChange={(e) => setRosterSearch(e.target.value)}
-                                    />
+
+                                {/* MOVED BADGE HERE TO MATCH CUSTOMER LAYOUT */}
+                                <div className="flex items-center gap-1.5 bg-[var(--bg-subtle)] px-2.5 py-1 rounded-md shadow-inner border border-[var(--border-color)]">
+                                    <Users size={12} className="text-indigo-500" />
+                                    <span className="font-black text-[9px] text-[var(--text-main)] uppercase tracking-widest">
+                                        {filteredTeam.length} Found
+                                    </span>
                                 </div>
                             </div>
-                            {currentUser?.role === 'admin' && (
-                                <button onClick={() => setIsAddModalOpen(true)} className="btn btn-gradient text-white shadow-lg shadow-indigo-500/30 border-none gap-2 px-6 hover:scale-105 transition-transform rounded-xl h-12 flex-none">
-                                    <UserPlus size={18} strokeWidth={2.5} /> <span className="hidden md:inline font-bold">Add Staff</span>
-                                </button>
-                            )}
+
+                            <div className="relative group">
+                                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-[var(--text-muted)] group-focus-within:text-indigo-500 transition-colors">
+                                    <Search size={18} />
+                                </div>
+                                <input
+                                    type="text"
+                                    placeholder="Find staff member..."
+                                    className="input input-bordered w-full h-12 pl-12 bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] font-medium shadow-inner transition-all focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 text-sm rounded-xl"
+                                    value={rosterSearch}
+                                    onChange={(e) => setRosterSearch(e.target.value)}
+                                />
+                            </div>
                         </div>
                     </div>
 

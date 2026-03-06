@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
-import { useNavigate } from 'react-router-dom';
+import Navbar from '../components/Navbar';
 import {
-    Search, Plus, Package, AlertTriangle, ArrowLeft,
-    Edit3, Trash2, QrCode, MapPin, SlidersHorizontal, ArrowDownAZ, ArrowUp10, DollarSign, Box, Hash, Tag, Wrench, Moon, Sun
+    Search, Plus, Package, Edit3, Trash2, QrCode, MapPin,
+    SlidersHorizontal, ArrowDownAZ, ArrowUp10, DollarSign, Box, Hash, Tag
 } from 'lucide-react';
 import { useToast } from '../context/ToastProvider';
 import { formatCurrency } from '../utils';
@@ -11,7 +11,6 @@ import InventoryModal from '../components/InventoryModal';
 import QRScanner from '../components/QRScanner';
 
 export default function Inventory() {
-    const navigate = useNavigate();
     const { addToast } = useToast();
 
     // Data State
@@ -22,7 +21,6 @@ export default function Inventory() {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterTab, setFilterTab] = useState('all'); // 'all', 'low', 'out'
     const [sortBy, setSortBy] = useState('name'); // 'name', 'qty_asc', 'qty_desc', 'price_high'
-    const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light');
 
     // Modal State
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -32,17 +30,6 @@ export default function Inventory() {
     useEffect(() => {
         fetchInventory();
     }, []);
-
-    useEffect(() => {
-        document.documentElement.setAttribute('data-theme', theme);
-        if (theme === 'dark') document.documentElement.classList.add('dark');
-        else document.documentElement.classList.remove('dark');
-        localStorage.setItem('theme', theme);
-    }, [theme]);
-
-    const toggleTheme = () => {
-        setTheme(prev => prev === 'light' ? 'dark' : 'light');
-    };
 
     async function fetchInventory() {
         setLoading(true);
@@ -98,88 +85,86 @@ export default function Inventory() {
     const lowStockCount = inventory.filter(i => i.quantity < (i.min_quantity || 3) && i.quantity > 0).length;
     const outStockCount = inventory.filter(i => i.quantity === 0).length;
 
+    // --- INVENTORY SPECIFIC ACTIONS TO INJECT INTO NAVBAR ---
+    const inventoryActions = (
+        <>
+            <button className="btn btn-sm btn-circle btn-ghost text-[var(--text-muted)] hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all" onClick={() => setIsScanning(true)} title="Scan Barcode">
+                <QrCode size={20} />
+            </button>
+            <button onClick={() => { setEditingItem(null); setIsModalOpen(true); }} className="btn btn-sm md:btn-md btn-gradient text-white gap-2 shadow-lg shadow-indigo-500/30 hover:scale-105 border-none transition-all px-4 rounded-full ml-1">
+                <Plus size={16} strokeWidth={3} /> <span className="hidden md:inline font-bold tracking-wide">Add Part</span>
+            </button>
+        </>
+    );
+
     return (
         <div className="min-h-screen p-4 md:p-6 font-sans pb-24 transition-colors duration-300">
 
-            {/* PREMIUM NAVBAR */}
-            <div className="navbar rounded-2xl mb-6 sticky top-2 z-40 flex justify-between shadow-sm backdrop-blur-md bg-[var(--bg-surface)] border border-[var(--border-color)] px-3 py-2 animate-fade relative">
-
-                <div className="flex items-center z-10">
-                    <button onClick={() => navigate('/dashboard')} className="btn btn-sm btn-ghost gap-2 px-3 text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-main)] transition-all rounded-lg group">
-                        <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform duration-300" />
-                        <span className="hidden md:inline font-bold">Dashboard</span>
-                    </button>
-                </div>
-
-                {/* --- CENTER BRANDING --- */}
-                <div
-                    onClick={() => navigate('/')}
-                    className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 hidden md:flex items-center gap-2 cursor-pointer hover:scale-105 transition-transform z-10"
-                    title="Go to Dashboard"
-                >
-                    <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
-                        <Wrench size={14} fill="currentColor" />
-                    </div>
-                    <span className="font-black text-[var(--text-main)] text-lg tracking-tight">University <span className="text-indigo-500">Vac & Sew</span></span>
-                </div>
-
-                <div className="flex gap-1 sm:gap-2 z-10 items-center">
-                    <button onClick={() => setIsScanning(true)} className="btn btn-sm btn-circle btn-ghost text-[var(--text-muted)] hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all" title="Scan Barcode"><QrCode size={18} /></button>
-                    <button onClick={toggleTheme} className="btn btn-sm btn-circle btn-ghost text-[var(--text-muted)] hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-all" title="Toggle Theme">
-                        {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
-                    </button>
-                    <button onClick={() => { setEditingItem(null); setIsModalOpen(true); }} className="btn btn-sm btn-gradient text-white gap-2 shadow-lg shadow-indigo-500/30 hover:scale-105 border-none transition-all px-4 rounded-full ml-1">
-                        <Plus size={16} strokeWidth={3} /> <span className="font-bold tracking-wide">Add Part</span>
-                    </button>
-                </div>
-            </div>
+            {/* USING THE NEW GLOBAL NAVBAR COMPONENT */}
+            <Navbar activeTab="inventory" rightActions={inventoryActions} />
 
             {/* HEADER & STATS */}
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8 animate-fade-in-up relative z-30">
 
                 {/* Main Control Panel */}
-                <div className="lg:col-span-3 bg-[var(--bg-surface)] rounded-2xl border border-[var(--border-color)] p-6 shadow-sm">
-                    <div className="flex flex-col md:flex-row justify-between md:items-end gap-5 mb-6">
+                <div className="lg:col-span-3 bg-[var(--bg-surface)] rounded-2xl border border-[var(--border-color)] p-6 md:p-8 shadow-sm relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500"></div>
+
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-6">
+
+                        {/* Title Section */}
                         <div>
-                            <h1 className="text-2xl font-black text-[var(--text-main)] flex items-center gap-3 tracking-tight mb-2">
-                                <Package size={28} className="text-indigo-600" /> Inventory Database
+                            <h1 className="text-3xl font-black text-[var(--text-main)] tracking-tight flex items-center gap-3 mb-2">
+                                <Package className="text-indigo-600" size={32} />
+                                Inventory Database
                             </h1>
-                            <p className="text-sm text-[var(--text-muted)] font-medium pl-10">Manage stock levels, locations, and pricing.</p>
+                            <p className="text-sm font-bold text-[var(--text-muted)]">
+                                Manage stock levels, locations, and pricing.
+                            </p>
                         </div>
 
-                        {/* Premium Recessed Stats Badges */}
-                        <div className="flex gap-3">
-                            <div className="flex items-center gap-2 bg-[var(--bg-subtle)] px-3 py-1.5 rounded-md shadow-inner border border-[var(--border-color)]">
-                                <Box size={14} className="text-[var(--text-muted)]" />
-                                <span className="font-black text-[10px] text-[var(--text-main)] uppercase tracking-widest">
-                                    {inventory.length} SKUs
-                                </span>
+                        {/* Search & Stats Section (Right Aligned) */}
+                        <div className="w-full md:w-96 flex flex-col justify-end">
+                            <div className="flex justify-between items-end mb-1.5 pl-1 pr-1">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">
+                                    Global Search
+                                </label>
+
+                                {/* MOVED STATS HERE */}
+                                <div className="hidden sm:flex gap-2">
+                                    <div className="flex items-center gap-1.5 bg-[var(--bg-subtle)] px-2 py-1 rounded-md shadow-inner border border-[var(--border-color)]">
+                                        <Box size={12} className="text-[var(--text-muted)]" />
+                                        <span className="font-black text-[9px] text-[var(--text-main)] uppercase tracking-widest">
+                                            {inventory.length} SKUs
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 bg-[var(--bg-subtle)] px-2 py-1 rounded-md shadow-inner border border-[var(--border-color)]">
+                                        <DollarSign size={12} className="text-emerald-500" />
+                                        <span className="font-black text-[9px] text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">
+                                            {formatCurrency(totalValue)}
+                                        </span>
+                                    </div>
+                                </div>
                             </div>
-                            <div className="flex items-center gap-2 bg-[var(--bg-subtle)] px-3 py-1.5 rounded-md shadow-inner border border-[var(--border-color)]">
-                                <DollarSign size={14} className="text-emerald-500" />
-                                <span className="font-black text-[10px] text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">
-                                    {formatCurrency(totalValue)} Value
-                                </span>
+
+                            <div className="relative group">
+                                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-[var(--text-muted)] group-focus-within:text-indigo-500 transition-colors">
+                                    <Search size={18} />
+                                </div>
+                                <input
+                                    type="text"
+                                    placeholder="Search parts, SKU, or brand..."
+                                    className="input input-bordered w-full h-12 pl-12 bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] font-medium shadow-inner transition-all focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 text-sm rounded-xl"
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                />
                             </div>
                         </div>
                     </div>
 
-                    {/* Toolbar: Search, Sort, Filters */}
-                    <div className="flex flex-col md:flex-row gap-4 items-center border-t border-[var(--border-color)] pt-6 relative z-20">
+                    {/* Toolbar: Sort & Filters */}
+                    <div className="flex flex-col md:flex-row gap-4 justify-end items-center border-t border-[var(--border-color)] pt-6 relative z-20">
 
-                        {/* Search */}
-                        <div className="relative flex-1 w-full group">
-                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)] group-focus-within:text-indigo-500 transition-colors" size={18} />
-                            <input
-                                type="text"
-                                placeholder="Search parts, SKU, or brand..."
-                                className="input input-bordered w-full pl-11 h-12 bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] font-medium shadow-inner transition-all focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500"
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                            />
-                        </div>
-
-                        {/* Right Side Controls */}
                         <div className="flex gap-3 w-full md:w-auto">
 
                             {/* Segmented Filter Control */}
@@ -206,7 +191,7 @@ export default function Inventory() {
 
                             {/* Sort Dropdown */}
                             <div className="dropdown dropdown-end">
-                                <div tabIndex={0} role="button" className="btn h-12 bg-[var(--bg-subtle)] border-[var(--border-color)] shadow-inner text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface)] transition-all px-4 rounded-xl gap-2">
+                                <div tabIndex={0} role="button" className="btn h-10 bg-[var(--bg-subtle)] border-[var(--border-color)] shadow-inner text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface)] transition-all px-4 rounded-xl gap-2">
                                     <SlidersHorizontal size={16} /> <span className="hidden sm:inline font-bold">Sort</span>
                                 </div>
                                 <ul tabIndex={0} className="dropdown-content z-[100] menu p-2 mt-2 shadow-2xl bg-[var(--bg-surface)] rounded-xl w-52 border border-[var(--border-color)] animate-pop">
@@ -235,7 +220,10 @@ export default function Inventory() {
 
             {/* GRID - Replicated TicketCard Style */}
             {loading ? (
-                <div className="flex justify-center mt-20"><span className="loading loading-spinner loading-lg text-indigo-500"></span></div>
+                <div className="flex flex-col items-center justify-center py-20">
+                    <span className="loading loading-spinner loading-lg text-indigo-500 mb-4"></span>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] animate-pulse">Loading Inventory...</span>
+                </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 animate-fade relative z-10">
                     {filteredItems.map(item => {
@@ -332,10 +320,10 @@ export default function Inventory() {
                         );
                     })}
                     {filteredItems.length === 0 && (
-                        <div className="col-span-full text-center p-16 bg-[var(--bg-surface)] rounded-2xl border-2 border-dashed border-[var(--border-color)] shadow-sm">
-                            <Package size={48} className="mx-auto mb-4 text-[var(--border-color)]" />
-                            <p className="font-bold text-lg text-[var(--text-main)]">No parts found</p>
-                            <p className="text-sm text-[var(--text-muted)] mt-1">Adjust your filters or add a new part.</p>
+                        <div className="col-span-full text-center py-24 bg-[var(--bg-surface)] rounded-3xl border-2 border-dashed border-[var(--border-color)] shadow-sm">
+                            <Package size={48} className="mx-auto mb-4 text-[var(--text-muted)] opacity-50" />
+                            <h3 className="text-xl font-black text-[var(--text-main)] tracking-tight mb-2">No parts found</h3>
+                            <p className="text-sm font-medium text-[var(--text-muted)]">Adjust your search or add a new part.</p>
                         </div>
                     )}
                 </div>

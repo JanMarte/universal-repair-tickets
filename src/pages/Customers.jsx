@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { useNavigate } from 'react-router-dom';
-import { Search, User, Phone, Mail, ChevronRight, Users, ArrowLeft, Hash, Calendar, Wrench, Moon, Sun, Package } from 'lucide-react';
-import { formatPhoneNumber, maskPhone, maskEmail } from '../utils';
-import { format } from 'date-fns';
+import Navbar from '../components/Navbar';
+import { Search, User, Phone, Mail, ChevronRight, Users, Package } from 'lucide-react';
+import { maskPhone, maskEmail } from '../utils';
 import { useToast } from '../context/ToastProvider';
 
 export default function Customers() {
@@ -12,19 +12,6 @@ export default function Customers() {
     const [customers, setCustomers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
-    const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light');
-
-    // --- THEME MANAGEMENT ---
-    useEffect(() => {
-        document.documentElement.setAttribute('data-theme', theme);
-        if (theme === 'dark') document.documentElement.classList.add('dark');
-        else document.documentElement.classList.remove('dark');
-        localStorage.setItem('theme', theme);
-    }, [theme]);
-
-    const toggleTheme = () => {
-        setTheme(prev => prev === 'light' ? 'dark' : 'light');
-    };
 
     // --- FETCH CUSTOMERS ---
     useEffect(() => {
@@ -64,57 +51,40 @@ export default function Customers() {
         return name.substring(0, 2).toUpperCase();
     };
 
-    return (
-        /* REMOVED bg-[var(--bg-subtle)] here so it uses the Dashboard background */
-        <div className="min-h-screen p-4 md:p-6 font-sans transition-colors duration-300 pb-24">
-            <div className="max-w-7xl mx-auto space-y-6">
-
-                {/* --- PREMIUM NAVBAR --- */}
-                {/* REMOVED /90 from bg-[var(--bg-surface)] to fix the flat gray bug */}
-                <div className="navbar rounded-2xl sticky top-2 z-40 flex justify-between shadow-sm bg-[var(--bg-surface)] border border-[var(--border-color)] px-4 py-3 animate-fade-in-up">
-
-                    <div className="flex items-center gap-2">
-                        <button onClick={() => navigate('/')} className="btn btn-sm btn-ghost gap-2 px-3 text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-main)] transition-all rounded-lg group">
-                            <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform duration-300" />
-                            <span className="hidden sm:inline font-bold">Dashboard</span>
-                        </button>
+    // --- FULL PAGE THEMED LOADING SCREEN ---
+    if (loading) {
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center p-6 transition-colors duration-300">
+                <div className="flex flex-col items-center animate-fade-in-up">
+                    <div className="w-16 h-16 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-2xl shadow-xl flex items-center justify-center mb-6 animate-pulse">
+                        <User size={28} className="text-indigo-500" />
                     </div>
-
-                    <div
-                        onClick={() => navigate('/')}
-                        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 hidden md:flex items-center gap-2 cursor-pointer group active:scale-95 transition-transform"
-                        title="Return to Dashboard"
-                    >
-                        <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center text-white shadow-md shadow-indigo-500/20 group-hover:scale-110 transition-transform duration-300">
-                            <Wrench size={14} fill="currentColor" />
-                        </div>
-                        <span className="font-black text-[var(--text-main)] text-lg tracking-tight group-hover:opacity-80 transition-opacity">
-                            University <span className="text-indigo-500">Vac & Sew</span>
-                        </span>
-                    </div>
-
+                    <h3 className="font-black text-[var(--text-main)] text-xl tracking-tight mb-2">
+                        Loading Profile...
+                    </h3>
                     <div className="flex items-center gap-2">
-                        <div className="hidden sm:flex items-center gap-2 bg-[var(--bg-subtle)] px-3 py-1.5 rounded-md shadow-inner border border-[var(--border-color)] mr-2">
-                            <Users size={14} className="text-indigo-500" />
-                            <span className="font-black text-[10px] text-[var(--text-main)] uppercase tracking-widest">
-                                {filteredCustomers.length} Found
-                            </span>
-                        </div>
-                        <button
-                            onClick={toggleTheme}
-                            className="w-10 h-10 flex items-center justify-center rounded-full bg-[var(--bg-subtle)] border border-[var(--border-color)] shadow-inner text-[var(--text-muted)] hover:text-indigo-500 transition-colors"
-                            title="Toggle Theme"
-                        >
-                            {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
-                        </button>
+                        <span className="loading loading-dots loading-sm text-[var(--text-muted)]"></span>
                     </div>
                 </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="min-h-screen p-4 md:p-6 font-sans transition-colors duration-300 pb-24">
+
+            {/* USING THE NEW GLOBAL NAVBAR COMPONENT */}
+            <Navbar activeTab="customers" />
+
+            <div className="max-w-7xl mx-auto space-y-6">
 
                 {/* --- HEADER & SEARCH --- */}
                 <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-3xl p-6 md:p-8 shadow-sm animate-fade-in-up relative overflow-hidden z-10" style={{ animationDelay: '0.1s' }}>
                     <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500"></div>
 
                     <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
+
+                        {/* Title Section (Left) */}
                         <div>
                             <h1 className="text-3xl font-black text-[var(--text-main)] tracking-tight flex items-center gap-3 mb-2">
                                 <Users className="text-indigo-600" size={32} />
@@ -125,10 +95,21 @@ export default function Customers() {
                             </p>
                         </div>
 
-                        <div className="w-full lg:w-96">
-                            <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] mb-1.5 block pl-1">
-                                Global Search
-                            </label>
+                        {/* Search & Found Count Section (Right) */}
+                        <div className="w-full lg:w-96 flex flex-col justify-end">
+                            <div className="flex justify-between items-end mb-1.5 pl-1 pr-1">
+                                <label className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">
+                                    Global Search
+                                </label>
+
+                                <div className="flex items-center gap-1.5 bg-[var(--bg-subtle)] px-2.5 py-1 rounded-md shadow-inner border border-[var(--border-color)]">
+                                    <Users size={12} className="text-indigo-500" />
+                                    <span className="font-black text-[9px] text-[var(--text-main)] uppercase tracking-widest">
+                                        {filteredCustomers.length} Found
+                                    </span>
+                                </div>
+                            </div>
+
                             <div className="relative group">
                                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-[var(--text-muted)] group-focus-within:text-indigo-500 transition-colors">
                                     <Search size={18} />
@@ -146,12 +127,7 @@ export default function Customers() {
                 </div>
 
                 {/* --- CUSTOMER GRID --- */}
-                {loading ? (
-                    <div className="flex flex-col items-center justify-center py-20">
-                        <span className="loading loading-spinner loading-lg text-indigo-500 mb-4"></span>
-                        <span className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] animate-pulse">Loading Database...</span>
-                    </div>
-                ) : filteredCustomers.length === 0 ? (
+                {filteredCustomers.length === 0 ? (
                     <div className="text-center py-24 bg-[var(--bg-surface)] border-2 border-dashed border-[var(--border-color)] rounded-3xl shadow-sm animate-fade-in">
                         <User size={48} className="mx-auto text-[var(--text-muted)] mb-4 opacity-50" />
                         <h3 className="text-xl font-black text-[var(--text-main)] tracking-tight mb-2">No customers found</h3>

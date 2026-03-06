@@ -3,13 +3,14 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useReactToPrint } from 'react-to-print';
 import { format } from 'date-fns';
 import {
-    ArrowLeft, Camera, Image as ImageIcon, Loader2, Send, MessageSquare, Lock, Globe,
-    AlertTriangle, Save, X, Edit3, Printer, Calendar, User, Phone, Hash, Wrench, AlertCircle, FileText, History, Moon, Sun, QrCode, ShieldAlert, Laptop, PlusCircle, LockKeyhole, DollarSign, Truck,
+    Camera, Image as ImageIcon, Send, MessageSquare, Lock, Globe,
+    AlertTriangle, Save, X, Edit3, Printer, Calendar, User, Phone, Hash, Wrench, AlertCircle, FileText, History, QrCode, ShieldAlert, PlusCircle, LockKeyhole, DollarSign, Truck,
     Trash2, Tag, ClipboardList, Fingerprint, Cpu, Share2, ChevronDown, ChevronUp, ZoomIn, ZoomOut, Maximize2,
     CheckCircle, XCircle, Clock
 } from 'lucide-react';
 
 import { supabase } from '../supabaseClient';
+import Navbar from '../components/Navbar';
 import EstimateBuilder from '../components/EstimateBuilder';
 import CustomerEstimateView from '../components/CustomerEstimateView';
 import PartsOrderManager from '../components/PartsOrderManager';
@@ -29,7 +30,9 @@ export default function TicketDetail() {
     const [messages, setMessages] = useState([]);
     const [auditLogs, setAuditLogs] = useState([]);
     const [employees, setEmployees] = useState([]);
-    const [shopSettings, setShopSettings] = useState(null); // <-- NEW SETTINGS STATE
+    const [shopSettings, setShopSettings] = useState(null);
+    const [customerEmail, setCustomerEmail] = useState(null);
+
     const [loading, setLoading] = useState(true);
     const [estimateRefreshTrigger, setEstimateRefreshTrigger] = useState(0);
     const isLoadedRef = useRef(false);
@@ -48,16 +51,13 @@ export default function TicketDetail() {
     const [logToDelete, setLogToDelete] = useState(null);
     const [photoToDelete, setPhotoToDelete] = useState(null);
 
-    // Mobile & Theme
+    // Mobile & Scanner
     const [isMobileChatOpen, setIsMobileChatOpen] = useState(false);
     const [isScanning, setIsScanning] = useState(false);
-    const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light');
 
     // Refs
     const chatEndRef = useRef(null);
     const inputRef = useRef(null);
-
-    // Print Refs
     const customerLabelRef = useRef(null);
     const shopLabelRef = useRef(null);
 
@@ -85,12 +85,6 @@ export default function TicketDetail() {
         addToast("Public link copied to clipboard!", "success");
     };
 
-    useEffect(() => {
-        document.documentElement.setAttribute('data-theme', theme);
-        if (theme === 'dark') document.documentElement.classList.add('dark');
-        else document.documentElement.classList.remove('dark');
-    }, [theme]);
-
     useEffect(() => { fetchData(); }, [id]);
 
     useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, activeTab, isMobileChatOpen]);
@@ -108,9 +102,7 @@ export default function TicketDetail() {
 
     const fetchImages = async () => {
         const { data, error } = await supabase.storage.from('ticket-attachments').list(`${id}/`, {
-            limit: 20,
-            offset: 0,
-            sortBy: { column: 'created_at', order: 'desc' },
+            limit: 20, offset: 0, sortBy: { column: 'created_at', order: 'desc' },
         });
 
         if (!error && data) {
@@ -122,9 +114,7 @@ export default function TicketDetail() {
         }
     };
 
-    useEffect(() => {
-        fetchImages();
-    }, [id]);
+    useEffect(() => { fetchImages(); }, [id]);
 
     const handleImageUpload = async (event) => {
         try {
@@ -136,10 +126,7 @@ export default function TicketDetail() {
             const fileName = `${Date.now()}.${fileExt}`;
             const filePath = `${id}/${fileName}`;
 
-            const { error: uploadError } = await supabase.storage
-                .from('ticket-attachments')
-                .upload(filePath, file);
-
+            const { error: uploadError } = await supabase.storage.from('ticket-attachments').upload(filePath, file);
             if (uploadError) throw uploadError;
 
             addToast('Photo saved successfully', 'success');
@@ -151,10 +138,7 @@ export default function TicketDetail() {
         }
     };
 
-    const promptDeletePhoto = (imageName, e) => {
-        e.stopPropagation();
-        setPhotoToDelete(imageName);
-    };
+    const promptDeletePhoto = (imageName, e) => { e.stopPropagation(); setPhotoToDelete(imageName); };
 
     const confirmDeletePhoto = async () => {
         if (!photoToDelete) return;
@@ -162,7 +146,6 @@ export default function TicketDetail() {
             setUploading(true);
             const { error } = await supabase.storage.from('ticket-attachments').remove([`${id}/${photoToDelete}`]);
             if (error) throw error;
-
             addToast("Photo deleted", "success");
             setImages(prev => prev.filter(img => img.name !== photoToDelete));
             setPhotoToDelete(null);
@@ -181,17 +164,8 @@ export default function TicketDetail() {
     const [isDragging, setIsDragging] = useState(false);
     const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
-    const openLightbox = (img) => {
-        setLightboxImage(img);
-        setZoomLevel(1);
-        setPan({ x: 0, y: 0 });
-    };
-
-    const closeLightbox = () => {
-        setLightboxImage(null);
-        setZoomLevel(1);
-        setPan({ x: 0, y: 0 });
-    };
+    const openLightbox = (img) => { setLightboxImage(img); setZoomLevel(1); setPan({ x: 0, y: 0 }); };
+    const closeLightbox = () => { setLightboxImage(null); setZoomLevel(1); setPan({ x: 0, y: 0 }); };
 
     const handleZoom = (direction) => {
         setZoomLevel(prev => {
@@ -203,23 +177,11 @@ export default function TicketDetail() {
         });
     };
 
-    const handleMouseDown = (e) => {
-        if (zoomLevel > 1) {
-            e.preventDefault();
-            setIsDragging(true);
-            setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
-        }
-    };
-
-    const handleMouseMove = (e) => {
-        if (isDragging && zoomLevel > 1) {
-            e.preventDefault();
-            setPan({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y });
-        }
-    };
-
+    const handleMouseDown = (e) => { if (zoomLevel > 1) { e.preventDefault(); setIsDragging(true); setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y }); } };
+    const handleMouseMove = (e) => { if (isDragging && zoomLevel > 1) { e.preventDefault(); setPan({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y }); } };
     const handleMouseUp = () => setIsDragging(false);
 
+    // --- MAIN DATA FETCH ---
     async function fetchData() {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
@@ -236,34 +198,29 @@ export default function TicketDetail() {
         }
 
         const { data: ticketData } = await supabase.from('tickets').select('*').eq('id', id).single();
-
-        // --- FETCH SHOP SETTINGS ---
         const { data: settingsData } = await supabase.from('shop_settings').select('*').eq('id', 1).single();
         if (settingsData) setShopSettings(settingsData);
 
-        // --- SELF-HEALING DATA FIX FOR OLD TICKETS ---
-        if (ticketData && ticketData.customer_id && (!ticketData.customer_name || !ticketData.phone)) {
+        if (ticketData && ticketData.customer_id) {
             const { data: customerData } = await supabase
                 .from('customers')
-                .select('full_name, phone')
+                .select('full_name, phone, email')
                 .eq('id', ticketData.customer_id)
                 .maybeSingle();
 
             if (customerData) {
-                ticketData.customer_name = ticketData.customer_name || customerData.full_name;
-                ticketData.phone = ticketData.phone || customerData.phone;
-                supabase.from('tickets').update({ customer_name: ticketData.customer_name, phone: ticketData.phone }).eq('id', id).then();
+                setCustomerEmail(customerData.email);
+
+                if (!ticketData.customer_name || !ticketData.phone) {
+                    ticketData.customer_name = ticketData.customer_name || customerData.full_name;
+                    ticketData.phone = ticketData.phone || customerData.phone;
+                    supabase.from('tickets').update({ customer_name: ticketData.customer_name, phone: ticketData.phone }).eq('id', id).then();
+                }
             }
         }
-        // ---------------------------------------------
 
         setTicket(ticketData);
-        setEditForm({
-            brand: ticketData?.brand,
-            model: ticketData?.model,
-            serial_number: ticketData?.serial_number,
-            description: ticketData?.description
-        });
+        setEditForm({ brand: ticketData?.brand, model: ticketData?.model, serial_number: ticketData?.serial_number, description: ticketData?.description });
 
         const { data: msgData } = await supabase.from('ticket_messages').select('*').eq('ticket_id', id).order('created_at', { ascending: true });
         setMessages(msgData || []);
@@ -277,67 +234,72 @@ export default function TicketDetail() {
 
     const logAudit = async (action, details, extraMetadata = {}) => {
         const actorName = currentUser?.full_name || currentUser?.email || 'System';
-        const metadata = {
-            ...extraMetadata,
-            device: navigator.userAgent,
-            timestamp: new Date().toISOString(),
-            user_email: currentUser?.email
-        };
+        const metadata = { ...extraMetadata, device: navigator.userAgent, timestamp: new Date().toISOString(), user_email: currentUser?.email };
 
-        await supabase.from('audit_logs').insert([{
-            ticket_id: id,
-            actor_name: actorName,
-            action: action,
-            details: details,
-            metadata: metadata
-        }]);
-
+        await supabase.from('audit_logs').insert([{ ticket_id: id, actor_name: actorName, action: action, details: details, metadata: metadata }]);
         const { data: refreshedLogs } = await supabase.from('audit_logs').select('*').eq('ticket_id', id).order('created_at', { ascending: false });
         if (refreshedLogs) setAuditLogs(refreshedLogs);
     };
 
-    const handleSaveEdit = async () => {
-        const hasChanges =
-            ticket.brand !== editForm.brand ||
-            ticket.model !== editForm.model ||
-            ticket.serial_number !== editForm.serial_number ||
-            ticket.description !== editForm.description;
+    const notifyCustomer = async (type, content) => {
+        if (!customerEmail) return;
 
-        if (!hasChanges) {
-            setIsEditModalOpen(false);
-            return;
+        let subject = '';
+        let html = '';
+        const ticketUrl = `${window.location.origin}/status/${id}`;
+        const shopName = shopSettings?.shop_name || 'Our Shop';
+
+        if (type === 'status') {
+            subject = `Repair Update: ${ticket.brand} ${ticket.model}`;
+            html = `
+                <div style="font-family: sans-serif; max-w: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 8px;">
+                    <h2 style="color: #4f46e5; margin-bottom: 10px;">Status Update</h2>
+                    <p style="color: #374151; font-size: 16px;">Hello,</p>
+                    <p style="color: #374151; font-size: 16px;">Your repair ticket (<strong>#${id}</strong>) has been updated to: <strong>${content.toUpperCase()}</strong>.</p>
+                    <a href="${ticketUrl}" style="display: inline-block; margin-top: 20px; padding: 12px 24px; background-color: #4f46e5; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">View Full Ticket Details</a>
+                    <p style="color: #6b7280; font-size: 12px; margin-top: 30px;">Thank you for choosing ${shopName}.</p>
+                </div>
+            `;
+        } else if (type === 'message') {
+            subject = `New Message from Technician (Ticket #${id})`;
+            html = `
+                <div style="font-family: sans-serif; max-w: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 8px;">
+                    <h2 style="color: #4f46e5; margin-bottom: 10px;">New Message</h2>
+                    <p style="color: #374151; font-size: 16px;">Hello,</p>
+                    <p style="color: #374151; font-size: 16px;">A technician left a new message regarding your repair:</p>
+                    <blockquote style="background: #f3f4f6; padding: 15px; border-left: 4px solid #4f46e5; border-radius: 4px; margin: 20px 0; color: #1f2937; font-style: italic;">
+                        "${content}"
+                    </blockquote>
+                    <a href="${ticketUrl}" style="display: inline-block; margin-top: 10px; padding: 12px 24px; background-color: #4f46e5; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">Reply in Portal</a>
+                </div>
+            `;
         }
 
-        const oldData = { ...ticket };
+        try {
+            await fetch('/api/send-email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ to: customerEmail, subject, html })
+            });
+        } catch (e) {
+            console.error("Failed to trigger email alert:", e);
+        }
+    };
 
-        const { error } = await supabase
-            .from('tickets')
-            .update({
-                brand: editForm.brand,
-                model: editForm.model,
-                serial_number: editForm.serial_number,
-                description: editForm.description
-            })
-            .eq('id', id);
+    const handleSaveEdit = async () => {
+        const hasChanges = ticket.brand !== editForm.brand || ticket.model !== editForm.model || ticket.serial_number !== editForm.serial_number || ticket.description !== editForm.description;
+        if (!hasChanges) { setIsEditModalOpen(false); return; }
+
+        const oldData = { ...ticket };
+        const { error } = await supabase.from('tickets').update({ brand: editForm.brand, model: editForm.model, serial_number: editForm.serial_number, description: editForm.description }).eq('id', id);
 
         if (error) {
             addToast("Failed to update ticket", "error");
         } else {
-            setTicket(prev => ({
-                ...prev,
-                brand: editForm.brand,
-                model: editForm.model,
-                serial_number: editForm.serial_number,
-                description: editForm.description
-            }));
-
+            setTicket(prev => ({ ...prev, brand: editForm.brand, model: editForm.model, serial_number: editForm.serial_number, description: editForm.description }));
             setIsEditModalOpen(false);
             addToast("Ticket updated successfully", "success");
-
-            logAudit('UPDATE DETAILS', 'Modified ticket core information', {
-                previous_data: { brand: oldData.brand, model: oldData.model, serial: oldData.serial_number },
-                new_data: { brand: editForm.brand, model: editForm.model, serial: editForm.serial_number }
-            });
+            logAudit('UPDATE DETAILS', 'Modified ticket core information', { previous_data: { brand: oldData.brand, model: oldData.model, serial: oldData.serial_number }, new_data: { brand: editForm.brand, model: editForm.model, serial: editForm.serial_number } });
         }
     };
 
@@ -347,11 +309,7 @@ export default function TicketDetail() {
         const incomingTotal = parseFloat(newTotal || 0).toFixed(2);
 
         if (currentTotal !== incomingTotal) {
-            const { error } = await supabase
-                .from('tickets')
-                .update({ estimate_total: incomingTotal })
-                .eq('id', id);
-
+            const { error } = await supabase.from('tickets').update({ estimate_total: incomingTotal }).eq('id', id);
             if (!error) {
                 setTicket(prev => ({ ...prev, estimate_total: incomingTotal }));
                 logAudit('ESTIMATE CHANGE', `Updated total to $${incomingTotal}`);
@@ -365,9 +323,8 @@ export default function TicketDetail() {
     const executeDeleteLog = async () => {
         if (!logToDelete) return;
         const { error } = await supabase.from('audit_logs').delete().eq('id', logToDelete.id);
-        if (error) {
-            addToast("Failed to delete log", "error");
-        } else {
+        if (error) { addToast("Failed to delete log", "error"); }
+        else {
             addToast("Log entry deleted forever", "success");
             setAuditLogs(prev => prev.filter(log => log.id !== logToDelete.id));
             if (selectedLog?.id === logToDelete.id) setSelectedLog(null);
@@ -377,9 +334,7 @@ export default function TicketDetail() {
 
     const handleAssignment = async (assigneeId) => {
         const finalId = (assigneeId === "" || assigneeId === "UNASSIGNED") ? null : assigneeId;
-        const assigneeName = finalId
-            ? (employees.find(e => e.id === finalId)?.full_name || employees.find(e => e.id === finalId)?.email || 'Unknown')
-            : null;
+        const assigneeName = finalId ? (employees.find(e => e.id === finalId)?.full_name || employees.find(e => e.id === finalId)?.email || 'Unknown') : null;
 
         await supabase.from('tickets').update({ assigned_to: finalId, assignee_name: assigneeName }).eq('id', id);
         setTicket({ ...ticket, assigned_to: finalId, assignee_name: assigneeName });
@@ -400,17 +355,34 @@ export default function TicketDetail() {
 
         const isInternalNote = isStaff ? (activeTab === 'internal') : false;
         let senderName = 'Customer';
-        if (isStaff) {
-            senderName = currentUser?.full_name || currentUser?.email?.split('@')[0] || 'Staff';
-        } else if (ticket?.customer_name) {
-            senderName = ticket.customer_name;
-        }
+        if (isStaff) senderName = currentUser?.full_name || currentUser?.email?.split('@')[0] || 'Staff';
+        else if (ticket?.customer_name) senderName = ticket.customer_name;
 
+        // 1. Save to Ticket Chat
         const { error } = await supabase.from('ticket_messages').insert([{
-            ticket_id: id, message_text: newMessage, is_internal: isInternalNote, sender_name: senderName
+            ticket_id: id,
+            message_text: newMessage,
+            is_internal: isInternalNote,
+            sender_name: senderName
         }]);
 
         if (!error) {
+            // 2. NEW: If it's a staff message to the customer, queue the SMS!
+            if (isStaff && !isInternalNote && ticket?.phone) {
+                await supabase.from('global_sms').insert([{
+                    phone_number: ticket.phone,
+                    message_text: newMessage,
+                    direction: 'outbound',
+                    status: 'pending',
+                    is_read: true
+                }]);
+            }
+
+            // 3. Fallback: Email notification (Optional, keeps both systems running)
+            if (isStaff && !isInternalNote && shopSettings?.auto_email_new_message) {
+                notifyCustomer('message', newMessage);
+            }
+
             setNewMessage('');
             const { data: msgs } = await supabase.from('ticket_messages').select('*').eq('ticket_id', id).order('created_at', { ascending: true });
             setMessages(msgs);
@@ -423,10 +395,14 @@ export default function TicketDetail() {
         setTicket({ ...ticket, status: newStatus });
         await supabase.from('tickets').update({ status: newStatus }).eq('id', id);
         addToast(`Status updated`, 'success');
+
         if (oldStatus === 'completed' && newStatus !== 'completed') {
             logAudit('TICKET REOPENED', `Ticket reactivated by manager (Changed from Completed to ${newStatus})`);
         } else {
             logAudit('STATUS CHANGE', `Changed status from ${oldStatus} to ${newStatus}`, { from: oldStatus, to: newStatus });
+            if (shopSettings?.auto_email_status_change) {
+                notifyCustomer('status', newStatus.replace('_', ' '));
+            }
         }
     };
 
@@ -443,12 +419,6 @@ export default function TicketDetail() {
         await supabase.from('tickets').update({ estimate_status: newStatus }).eq('id', id);
         addToast(`Estimate marked as ${newStatus.toUpperCase()}`, 'success');
         logAudit('ESTIMATE STATUS', `Changed estimate status to ${newStatus}`);
-    };
-
-    const toggleTheme = () => {
-        const newTheme = theme === 'light' ? 'dark' : 'light';
-        setTheme(newTheme);
-        localStorage.setItem('theme', newTheme);
     };
 
     const filteredMessages = messages.filter(msg => {
@@ -601,42 +571,45 @@ export default function TicketDetail() {
         </div>
     );
 
-    if (loading) return <div className="flex justify-center mt-20"><span className="loading loading-spinner loading-lg text-indigo-500"></span></div>;
+    // --- FULL PAGE THEMED LOADING SCREEN ---
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-[var(--bg-subtle)] flex flex-col items-center justify-center p-6 transition-colors duration-300">
+                <div className="flex flex-col items-center animate-fade-in-up">
+                    <div className="w-16 h-16 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-2xl shadow-xl flex items-center justify-center mb-6 animate-pulse">
+                        <Wrench size={28} className="text-indigo-500" />
+                    </div>
+                    <h3 className="font-black text-[var(--text-main)] text-xl tracking-tight mb-2">
+                        Loading Ticket...
+                    </h3>
+                    <div className="flex items-center gap-2">
+                        <span className="loading loading-dots loading-sm text-[var(--text-muted)]"></span>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     if (!ticket) return <div className="p-10 text-center font-bold text-[var(--text-muted)]">Ticket not found.</div>;
+
+    // --- ACTIONS TO INJECT INTO GLOBAL NAVBAR ---
+    const ticketActions = (
+        <>
+            <button onClick={() => { navigator.clipboard.writeText(ticket.id); addToast('ID copied', 'success'); }} className="hidden sm:flex items-center gap-2 bg-[var(--bg-subtle)] hover:bg-[var(--bg-surface)] px-3 py-1.5 rounded-lg border border-[var(--border-color)] shadow-inner transition-all group cursor-pointer mr-1" title="Click to copy ID">
+                <Hash size={12} className="text-[var(--text-muted)] group-hover:text-indigo-500 transition-colors" />
+                <span className="font-mono text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">ID: {ticket.id}</span>
+            </button>
+            <button className="btn btn-sm btn-circle btn-ghost text-[var(--text-muted)] hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all" onClick={() => setIsScanning(true)} title="Scan QR Code">
+                <QrCode size={18} />
+            </button>
+        </>
+    );
 
     return (
         <div className="min-h-screen p-4 md:p-6 font-sans pb-32 lg:pb-24 transition-colors duration-300">
-            {/* NAVBAR */}
-            <div className="navbar rounded-2xl mb-6 sticky top-2 z-40 flex justify-between shadow-sm backdrop-blur-md bg-[var(--bg-surface)] border border-[var(--border-color)] px-3 py-2 animate-fade relative">
 
-                <div className="flex items-center z-10">
-                    <button onClick={() => navigate(-1)} className="btn btn-sm btn-ghost gap-2 px-3 text-[var(--text-muted)] hover:bg-[var(--bg-subtle)] hover:text-[var(--text-main)] transition-all rounded-lg group">
-                        <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform duration-300" />
-                        <span className="hidden md:inline font-bold">Dashboard</span>
-                    </button>
-                </div>
-
-                {/* --- CENTER BRANDING --- */}
-                <div
-                    onClick={() => navigate(isStaff ? '/' : '/my-tickets')}
-                    className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 hidden lg:flex items-center gap-2 cursor-pointer hover:scale-105 transition-transform z-10"
-                    title="Go to Home"
-                >
-                    <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
-                        <Wrench size={14} fill="currentColor" />
-                    </div>
-                    <span className="font-black text-[var(--text-main)] text-lg tracking-tight">University <span className="text-indigo-500">Vac & Sew</span></span>
-                </div>
-
-                <div className="flex-none flex items-center gap-1 sm:gap-2 z-10">
-                    <button onClick={() => { navigator.clipboard.writeText(ticket.id); addToast('ID copied', 'success'); }} className="hidden sm:flex items-center gap-2 bg-[var(--bg-subtle)] hover:bg-[var(--bg-surface)] px-3 py-1.5 rounded-lg border border-[var(--border-color)] shadow-inner transition-all group cursor-pointer mr-2" title="Click to copy ID">
-                        <Hash size={12} className="text-[var(--text-muted)] group-hover:text-indigo-500 transition-colors" />
-                        <span className="font-mono text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">ID: {ticket.id}</span>
-                    </button>
-                    <button className="btn btn-sm btn-circle btn-ghost text-[var(--text-muted)] hover:text-indigo-500 hover:bg-[var(--bg-subtle)] transition-colors" onClick={() => setIsScanning(true)} title="Scan QR Code"><QrCode size={18} /></button>
-                    <button className="btn btn-sm btn-circle btn-ghost text-[var(--text-muted)] hover:text-amber-500 hover:bg-[var(--bg-subtle)] transition-colors" onClick={toggleTheme} title="Toggle Light/Dark Mode">{theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}</button>
-                </div>
-            </div>
+            {/* USING THE NEW GLOBAL NAVBAR COMPONENT */}
+            <Navbar rightActions={ticketActions} />
 
             {/* HEADER CARD */}
             <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-2xl p-6 md:p-8 shadow-sm mb-6 relative z-30 animate-fade-in-up">
@@ -688,16 +661,12 @@ export default function TicketDetail() {
                         </div>
                     </div>
 
-                    {/* --- PREMIUM CONTROL CLUSTER --- */}
                     <div className="flex flex-col items-stretch w-full lg:w-[400px] gap-4 flex-none">
                         {isStaff ? (
                             <div className="flex flex-col gap-3">
-
-                                {/* Status & Quick Actions Row */}
                                 <div className="relative z-20">
                                     <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] mb-1.5 block pl-1">Ticket Status</label>
                                     <div className="flex gap-2 w-full">
-                                        {/* Status Dropdown */}
                                         <div className="dropdown dropdown-end flex-1">
                                             <div tabIndex={0} role="button" className={`btn w-full h-12 border-none shadow-md flex justify-between items-center px-4 transition-all hover:scale-[1.02] ${getStatusColor(ticket.status)} ${!canEdit ? 'opacity-50 cursor-not-allowed' : ''}`}>
                                                 <span className="font-black uppercase tracking-widest text-[11px] truncate mr-2">
@@ -719,7 +688,6 @@ export default function TicketDetail() {
                                             )}
                                         </div>
 
-                                        {/* Action Buttons */}
                                         <button onClick={handleCopyLink} className="btn btn-square h-12 w-12 border border-[var(--border-color)] bg-[var(--bg-surface)] shadow-sm hover:bg-[var(--bg-subtle)] text-indigo-500 flex-none transition-all hover:scale-[1.05]" title="Copy Public Link"><Share2 size={18} /></button>
                                         <div className="dropdown dropdown-end">
                                             <label tabIndex={0} className="btn btn-square h-12 w-12 border border-[var(--border-color)] bg-[var(--bg-surface)] shadow-sm hover:bg-[var(--bg-subtle)] text-[var(--text-main)] flex-none transition-all hover:scale-[1.05]"><Printer size={18} /></label>
@@ -731,7 +699,6 @@ export default function TicketDetail() {
                                     </div>
                                 </div>
 
-                                {/* Assignee Row */}
                                 <div className="relative z-10">
                                     <label className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] mb-1.5 block pl-1">Assigned Technician</label>
                                     <div className="dropdown dropdown-end w-full">
@@ -796,7 +763,6 @@ export default function TicketDetail() {
 
                         <div className="p-6 md:p-8 bg-[var(--bg-subtle)]">
 
-                            {/* Technical Specs - Recessed Cards */}
                             <div className="flex flex-wrap gap-4 mb-8">
                                 <div className="flex items-center gap-3 px-4 py-2 bg-[var(--bg-surface)] rounded-xl border border-[var(--border-color)] shadow-sm">
                                     <div className="p-2 bg-[var(--bg-subtle)] rounded-lg shadow-inner border border-[var(--border-color)]"><Cpu size={16} className="text-indigo-500" /></div>
@@ -814,7 +780,6 @@ export default function TicketDetail() {
                                 </div>
                             </div>
 
-                            {/* Customer Defect Box */}
                             <div className="relative mb-8">
                                 <div className="absolute -left-3 top-0 bottom-0 w-1 bg-amber-400 rounded-full"></div>
                                 <div className="pl-6">
@@ -826,7 +791,6 @@ export default function TicketDetail() {
                                 </div>
                             </div>
 
-                            {/* --- COLLAPSIBLE INTAKE PHOTOS --- */}
                             <div className="mb-8 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-2xl shadow-sm animate-fade-in-up overflow-hidden transition-all duration-300">
                                 <div onClick={() => setIsPhotosCollapsed(!isPhotosCollapsed)} className="p-5 flex justify-between items-center cursor-pointer hover:bg-[var(--bg-subtle)] transition-colors group select-none">
                                     <div className="flex items-center gap-3">
@@ -841,12 +805,14 @@ export default function TicketDetail() {
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                        <div className="relative" onClick={(e) => e.stopPropagation()}>
-                                            <input type="file" id="photo-upload" accept="image/*" onChange={handleImageUpload} disabled={uploading} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20" />
-                                            <button className={`btn btn-sm btn-ghost gap-2 text-[var(--text-muted)] hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all ${uploading ? 'loading' : ''}`}>
-                                                <PlusCircle size={16} /> <span className="hidden sm:inline font-bold">Add</span>
-                                            </button>
-                                        </div>
+                                        {canEdit && (
+                                            <div className="relative" onClick={(e) => e.stopPropagation()}>
+                                                <input type="file" id="photo-upload" accept="image/*" onChange={handleImageUpload} disabled={uploading} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20" />
+                                                <button className={`btn btn-sm btn-ghost gap-2 text-[var(--text-muted)] hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all ${uploading ? 'loading' : ''}`}>
+                                                    <PlusCircle size={16} /> <span className="hidden sm:inline font-bold">Add</span>
+                                                </button>
+                                            </div>
+                                        )}
                                         <div className="w-8 h-8 rounded-full bg-[var(--bg-subtle)] border border-[var(--border-color)] flex items-center justify-center text-[var(--text-muted)] shadow-inner">
                                             {isPhotosCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
                                         </div>
@@ -1166,7 +1132,6 @@ export default function TicketDetail() {
                 {/* 1. CUSTOMER RECEIPT (Standard 4x6 Label Size) */}
                 <div ref={customerLabelRef} className="bg-white text-black p-6 font-sans flex flex-col" style={{ width: '4in', height: '6in', boxSizing: 'border-box' }}>
                     <div className="text-center mb-4 border-b-2 border-black pb-4">
-                        {/* --- DYNAMIC SHOP IDENTITY --- */}
                         <h2 className="text-2xl font-black uppercase tracking-widest text-black">{shopSettings?.shop_name || 'Repair Receipt'}</h2>
                         <p className="text-xs font-bold text-gray-600 mt-1">{shopSettings?.shop_address}</p>
                         <p className="text-xs font-bold text-gray-600">{shopSettings?.shop_phone} • {shopSettings?.business_hours}</p>
@@ -1202,7 +1167,6 @@ export default function TicketDetail() {
                     </div>
 
                     <div className="flex flex-col items-center justify-center border-t-2 border-dashed border-gray-400 pt-4 mt-auto">
-                        {/* --- DYNAMIC LEGAL DISCLAIMER --- */}
                         <p className="text-[8px] text-gray-500 text-center mb-2 leading-tight px-4">{shopSettings?.receipt_disclaimer || 'Thank you for your business.'}</p>
                         <p className="text-[10px] font-black uppercase tracking-widest text-gray-600 mb-2">Scan for Live Status Updates</p>
                         <div className="p-2 border-4 border-black rounded-xl bg-white">
@@ -1228,7 +1192,6 @@ export default function TicketDetail() {
                                 {ticket?.created_at ? format(new Date(ticket.created_at), 'MM/dd/yy') : ''}
                             </span>
                         </div>
-                        {/* --- DYNAMIC SHOP NAME ON TAG --- */}
                         <div className="text-[8px] font-bold text-gray-400 uppercase mt-1 truncate">
                             {shopSettings?.shop_name}
                         </div>
