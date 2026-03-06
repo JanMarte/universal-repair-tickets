@@ -19,6 +19,7 @@ import { useToast } from '../context/ToastProvider';
 import { formatPhoneNumber } from '../utils';
 import QRScanner from '../components/QRScanner';
 import QRCode from "react-qr-code";
+import { DotLottieReact } from '@lottiefiles/dotlottie-react';
 
 export default function TicketDetail() {
     const { id } = useParams();
@@ -438,7 +439,8 @@ export default function TicketDetail() {
             case 'repairing': return 'bg-amber-500 text-white shadow-amber-500/30';
             case 'ready_pickup': return 'bg-emerald-500 text-white shadow-emerald-500/30';
             case 'completed': return 'bg-slate-500 text-white shadow-slate-500/30';
-            default: return 'bg-indigo-500 text-white shadow-indigo-500/30';
+            // NEW: Fallback color for any custom statuses the user adds
+            default: return 'bg-cyan-500 text-white shadow-cyan-500/30';
         }
     };
 
@@ -452,6 +454,7 @@ export default function TicketDetail() {
     };
 
     const QUICK_REPLIES = shopSettings?.quick_replies || [];
+    const CUSTOM_STATUSES = shopSettings?.custom_statuses || [];
 
     const renderChatInterface = () => (
         <div className="flex flex-col h-full bg-[var(--bg-surface)] relative">
@@ -571,28 +574,27 @@ export default function TicketDetail() {
         </div>
     );
 
-    // --- FULL PAGE THEMED LOADING SCREEN ---
     if (loading) {
         return (
             <div className="min-h-screen bg-[var(--bg-subtle)] flex flex-col items-center justify-center p-6 transition-colors duration-300">
-                <div className="flex flex-col items-center animate-fade-in-up">
-                    <div className="w-16 h-16 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-2xl shadow-xl flex items-center justify-center mb-6 animate-pulse">
-                        <Wrench size={28} className="text-indigo-500" />
-                    </div>
-                    <h3 className="font-black text-[var(--text-main)] text-xl tracking-tight mb-2">
-                        Loading Ticket...
+                <div className="w-64 h-64 md:w-80 md:h-80 mb-2">
+                    <DotLottieReact
+                        src="https://lottie.host/c0070dd2-7ebe-4540-9b76-6a2d0d44eca9/cj27hE1pQ7.lottie"
+                        loop
+                        autoplay
+                    />
+                </div>
+                <div className="bg-[var(--bg-surface)] px-8 py-5 rounded-3xl shadow-lg border border-[var(--border-color)] animate-pulse">
+                    <h3 className="font-black text-[var(--text-main)] text-xl tracking-tight flex items-center gap-3">
+                        <Wrench size={22} className="text-indigo-500" />
+                        Sweeping up ticket details...
                     </h3>
-                    <div className="flex items-center gap-2">
-                        <span className="loading loading-dots loading-sm text-[var(--text-muted)]"></span>
-                    </div>
                 </div>
             </div>
         );
     }
-
     if (!ticket) return <div className="p-10 text-center font-bold text-[var(--text-muted)]">Ticket not found.</div>;
 
-    // --- ACTIONS TO INJECT INTO GLOBAL NAVBAR ---
     const ticketActions = (
         <>
             <button onClick={() => { navigator.clipboard.writeText(ticket.id); addToast('ID copied', 'success'); }} className="hidden sm:flex items-center gap-2 bg-[var(--bg-subtle)] hover:bg-[var(--bg-surface)] px-3 py-1.5 rounded-lg border border-[var(--border-color)] shadow-inner transition-all group cursor-pointer mr-1" title="Click to copy ID">
@@ -608,7 +610,6 @@ export default function TicketDetail() {
     return (
         <div className="min-h-screen p-4 md:p-6 font-sans pb-32 lg:pb-24 transition-colors duration-300">
 
-            {/* USING THE NEW GLOBAL NAVBAR COMPONENT */}
             <Navbar rightActions={ticketActions} />
 
             {/* HEADER CARD */}
@@ -675,15 +676,31 @@ export default function TicketDetail() {
                                                 <ChevronDown size={16} className="opacity-70 flex-none" />
                                             </div>
                                             {canEdit && (
-                                                <ul tabIndex={0} className="dropdown-content z-[60] menu p-2 shadow-2xl bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl w-64 mt-2 animate-pop">
-                                                    <li className="menu-title text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] px-2 py-1">Update Status</li>
+                                                <ul tabIndex={0} className="dropdown-content z-[60] menu p-2 shadow-2xl bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl w-64 mt-2 animate-pop overflow-y-auto custom-scrollbar">
+
+                                                    {/* --- CORE STATUSES --- */}
+                                                    <li className="menu-title text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] px-2 py-1">Core Workflow</li>
                                                     <li><button onClick={(e) => { updateStatus('intake'); e.currentTarget.blur(); }} className="font-bold text-[var(--text-main)] hover:bg-[var(--bg-subtle)] rounded-lg py-2.5"><div className="w-2.5 h-2.5 rounded-full bg-blue-500 mr-2 shadow-sm"></div> In Queue</button></li>
                                                     <li><button onClick={(e) => { updateStatus('diagnosing'); e.currentTarget.blur(); }} className="font-bold text-[var(--text-main)] hover:bg-[var(--bg-subtle)] rounded-lg py-2.5"><div className="w-2.5 h-2.5 rounded-full bg-purple-500 mr-2 shadow-sm"></div> Diagnosing</button></li>
                                                     <li><button onClick={(e) => { updateStatus('waiting_parts'); e.currentTarget.blur(); }} className="font-bold text-[var(--text-main)] hover:bg-[var(--bg-subtle)] rounded-lg py-2.5"><div className="w-2.5 h-2.5 rounded-full bg-orange-500 mr-2 shadow-sm"></div> Waiting on Parts</button></li>
                                                     <li><button onClick={(e) => { updateStatus('repairing'); e.currentTarget.blur(); }} className="font-bold text-[var(--text-main)] hover:bg-[var(--bg-subtle)] rounded-lg py-2.5"><div className="w-2.5 h-2.5 rounded-full bg-amber-500 mr-2 shadow-sm"></div> Repairing</button></li>
                                                     <li><button onClick={(e) => { updateStatus('ready_pickup'); e.currentTarget.blur(); }} className="font-bold text-[var(--text-main)] hover:bg-[var(--bg-subtle)] rounded-lg py-2.5"><div className="w-2.5 h-2.5 rounded-full bg-emerald-500 mr-2 shadow-sm"></div> Ready for Pickup</button></li>
-                                                    <div className="border-t border-dashed border-[var(--border-color)] my-1"></div>
                                                     <li><button onClick={(e) => { updateStatus('completed'); e.currentTarget.blur(); }} className="font-bold text-[var(--text-main)] hover:bg-[var(--bg-subtle)] rounded-lg py-2.5"><div className="w-2.5 h-2.5 rounded-full bg-slate-500 mr-2 shadow-sm"></div> Completed</button></li>
+
+                                                    {/* --- DYNAMIC CUSTOM STATUSES --- */}
+                                                    {CUSTOM_STATUSES.length > 0 && (
+                                                        <>
+                                                            <div className="border-t border-dashed border-[var(--border-color)] my-2 mx-2"></div>
+                                                            <li className="menu-title text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] px-2 py-1">Custom Statuses</li>
+                                                            {CUSTOM_STATUSES.map(status => (
+                                                                <li key={status}>
+                                                                    <button onClick={(e) => { updateStatus(status); e.currentTarget.blur(); }} className="font-bold text-[var(--text-main)] hover:bg-[var(--bg-subtle)] rounded-lg py-2.5">
+                                                                        <div className="w-2.5 h-2.5 rounded-full bg-cyan-500 mr-2 shadow-sm"></div> {status}
+                                                                    </button>
+                                                                </li>
+                                                            ))}
+                                                        </>
+                                                    )}
                                                 </ul>
                                             )}
                                         </div>
@@ -1131,8 +1148,12 @@ export default function TicketDetail() {
 
                 {/* 1. CUSTOMER RECEIPT (Standard 4x6 Label Size) */}
                 <div ref={customerLabelRef} className="bg-white text-black p-6 font-sans flex flex-col" style={{ width: '4in', height: '6in', boxSizing: 'border-box' }}>
-                    <div className="text-center mb-4 border-b-2 border-black pb-4">
-                        <h2 className="text-2xl font-black uppercase tracking-widest text-black">{shopSettings?.shop_name || 'Repair Receipt'}</h2>
+                    <div className="text-center mb-4 border-b-2 border-black pb-4 flex flex-col items-center">
+                        {shopSettings?.logo_url ? (
+                            <img src={shopSettings.logo_url} alt="Shop Logo" className="max-h-16 mx-auto mb-2 object-contain" />
+                        ) : (
+                            <h2 className="text-2xl font-black uppercase tracking-widest text-black">{shopSettings?.shop_name || 'Repair Receipt'}</h2>
+                        )}
                         <p className="text-xs font-bold text-gray-600 mt-1">{shopSettings?.shop_address}</p>
                         <p className="text-xs font-bold text-gray-600">{shopSettings?.shop_phone} • {shopSettings?.business_hours}</p>
                         <p className="text-base font-bold text-gray-600 mt-3 font-mono">TICKET #{ticket?.id}</p>

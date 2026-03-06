@@ -1,32 +1,32 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
-import { LogOut, Package, Moon, Sun, Wrench, AlertCircle } from 'lucide-react';
+import { LogOut, Package, Moon, Sun, Wrench, AlertCircle, MapPin, Phone, Clock, ExternalLink } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import TicketCard from '../components/TicketCard';
+import Navbar from '../components/Navbar';
 
 export default function MyTickets() {
   const [tickets, setTickets] = useState([]);
+  const [shopSettings, setShopSettings] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light');
 
   const navigate = useNavigate();
 
-  // Apply Theme Class to HTML
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-    if (theme === 'dark') document.documentElement.classList.add('dark');
-    else document.documentElement.classList.remove('dark');
-    localStorage.setItem('theme', theme);
-  }, [theme]);
-
   useEffect(() => {
     fetchMyTickets();
+    fetchShopSettings();
   }, []);
+
+  async function fetchShopSettings() {
+    const { data } = await supabase.from('shop_settings').select('*').eq('id', 1).single();
+    if (data) {
+      setShopSettings(data);
+    }
+  }
 
   async function fetchMyTickets() {
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
-      // Use maybeSingle() to prevent the 406 Not Acceptable error if multiple/zero rows exist
       const { data: customer } = await supabase
         .from('customers')
         .select('id')
@@ -45,63 +45,83 @@ export default function MyTickets() {
     setLoading(false);
   }
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    navigate('/login');
+  // --- Helper to format days nicely ---
+  const formatDays = (daysArray) => {
+    if (!daysArray || daysArray.length === 0) return 'Check with shop for hours';
+    if (daysArray.length === 7) return 'Open 7 Days a Week';
+    if (daysArray.length === 5 && !daysArray.includes('Saturday') && !daysArray.includes('Sunday')) {
+      return 'Monday - Friday';
+    }
+    return daysArray.join(', ');
   };
 
-  const toggleTheme = () => {
-    const newTheme = theme === 'light' ? 'dark' : 'light';
-    setTheme(newTheme);
-    localStorage.setItem('theme', newTheme);
-  };
+  const shopNameStr = shopSettings?.shop_name || 'University Vacuum & Sewing';
 
   return (
-    /* Notice: No bg- color class here, so it inherits your clean Dashboard background perfectly! */
     <div className="min-h-screen p-4 md:p-6 font-sans transition-colors duration-300 pb-24">
-      <div className="max-w-5xl mx-auto space-y-6">
+      <div className="max-w-5xl mx-auto space-y-6 md:space-y-8">
 
-        {/* PREMIUM NAVBAR */}
-        {/* Notice: bg-[var(--bg-surface)] is solid to avoid the weird gray overlap issue */}
-        <div className="navbar rounded-2xl sticky top-2 z-40 flex justify-between shadow-sm bg-[var(--bg-surface)] border border-[var(--border-color)] px-4 py-3 animate-fade-in-up">
+        {/* Global Navbar ensures security checks work flawlessly */}
+        <Navbar />
 
-          {/* Left: Brand / Home Button */}
-          <div
-            onClick={() => navigate('/my-tickets')}
-            className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity group"
-            title="Refresh Portal"
-          >
-            <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-500/20 group-hover:scale-105 transition-transform">
-              <Wrench size={20} fill="currentColor" />
+        {/* --- PREMIUM SHOP INFORMATION CARD --- */}
+        {!loading && shopSettings && (
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-[32px] p-6 md:p-8 shadow-sm animate-fade-in-up relative overflow-hidden" style={{ animationDelay: '0.05s' }}>
+            <div className="absolute top-0 left-0 w-2 h-full bg-gradient-to-b from-indigo-500 to-purple-500"></div>
+
+            <div className="mb-6 border-b border-[var(--border-color)] pb-6 pl-2">
+              <h2 className="text-2xl md:text-3xl font-black text-[var(--text-main)] mb-1 tracking-tight">{shopSettings.shop_name || 'Our Shop'}</h2>
+              <p className="text-xs font-black uppercase tracking-widest text-[var(--text-muted)]">Shop Information & Hours</p>
             </div>
-            <div>
-              <div className="font-black text-lg md:text-xl tracking-tight text-[var(--text-main)] leading-none">
-                University <span className="text-indigo-500">Vac & Sew</span>
-              </div>
-              <p className="text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] mt-0.5">My Repair Portal</p>
+
+            {/* 3-Column Grid stops text from squeezing! */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pl-2">
+
+              {/* Address Block */}
+              {shopSettings.shop_address && (
+                <a
+                  href={`http://maps.google.com/?q=${encodeURIComponent(shopSettings.shop_address)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex flex-col gap-3 p-5 bg-[var(--bg-subtle)] hover:bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-indigo-300 rounded-2xl transition-all shadow-inner group"
+                >
+                  <div className="w-12 h-12 bg-[var(--bg-surface)] rounded-xl shadow-sm border border-[var(--border-color)] text-indigo-500 flex items-center justify-center group-hover:scale-110 transition-transform"><MapPin size={20} /></div>
+                  <div>
+                    <div className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] mb-1 flex items-center gap-1">Location <ExternalLink size={10} /></div>
+                    <div className="text-sm font-bold text-[var(--text-main)] whitespace-pre-wrap leading-snug">{shopSettings.shop_address}</div>
+                  </div>
+                </a>
+              )}
+
+              {/* Phone Block */}
+              {shopSettings.shop_phone && (
+                <a
+                  href={`tel:${shopSettings.shop_phone.replace(/\D/g, '')}`}
+                  className="flex flex-col gap-3 p-5 bg-[var(--bg-subtle)] hover:bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-emerald-300 rounded-2xl transition-all shadow-inner group"
+                >
+                  <div className="w-12 h-12 bg-[var(--bg-surface)] rounded-xl shadow-sm border border-[var(--border-color)] text-emerald-500 flex items-center justify-center group-hover:scale-110 transition-transform"><Phone size={20} /></div>
+                  <div>
+                    <div className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] mb-1">Call Us</div>
+                    <div className="text-lg font-bold font-mono text-[var(--text-main)] leading-none">{shopSettings.shop_phone}</div>
+                  </div>
+                </a>
+              )}
+
+              {/* Hours Block */}
+              {(shopSettings.business_hours || shopSettings.operating_days?.length > 0) && (
+                <div className="flex flex-col gap-3 p-5 bg-[var(--bg-subtle)] border border-[var(--border-color)] rounded-2xl shadow-inner opacity-90">
+                  <div className="w-12 h-12 bg-[var(--bg-surface)] rounded-xl shadow-sm border border-[var(--border-color)] text-amber-500 flex items-center justify-center"><Clock size={20} /></div>
+                  <div>
+                    <div className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] mb-1">
+                      {formatDays(shopSettings.operating_days)}
+                    </div>
+                    <div className="text-sm font-bold text-[var(--text-main)] whitespace-pre-wrap leading-snug">{shopSettings.business_hours || 'Open'}</div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
-
-          {/* Right: Actions */}
-          <div className="flex items-center gap-2 md:gap-3">
-            <button
-              onClick={toggleTheme}
-              className="w-10 h-10 flex items-center justify-center rounded-full bg-[var(--bg-subtle)] border border-[var(--border-color)] shadow-inner text-[var(--text-muted)] hover:text-indigo-500 transition-colors"
-              title="Toggle Theme"
-            >
-              {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
-            </button>
-
-            <div className="h-6 w-px bg-[var(--border-color)] mx-1 hidden sm:block"></div>
-
-            <button
-              onClick={handleLogout}
-              className="btn btn-sm h-10 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 border border-red-100 dark:border-red-800 shadow-sm transition-all gap-2 px-4"
-            >
-              <LogOut size={16} strokeWidth={2.5} /> <span className="hidden sm:inline font-bold">Sign Out</span>
-            </button>
-          </div>
-        </div>
+        )}
 
         {/* PAGE HEADER */}
         {!loading && (
@@ -126,7 +146,7 @@ export default function MyTickets() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
 
             {tickets.map(ticket => (
-              <TicketCard key={ticket.id} ticket={ticket} />
+              <TicketCard key={ticket.id} ticket={ticket} isCustomerView={true} />
             ))}
 
             {/* PREMIUM EMPTY STATE */}
@@ -150,7 +170,7 @@ export default function MyTickets() {
 
         {/* FOOTER */}
         <div className="text-center text-[var(--text-muted)] text-[10px] font-black uppercase tracking-widest opacity-50 pt-12 pb-6">
-          © 2026 University Vacuum & Sewing
+          © {new Date().getFullYear()} {shopNameStr}
         </div>
 
       </div>

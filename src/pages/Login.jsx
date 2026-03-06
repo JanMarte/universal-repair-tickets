@@ -6,41 +6,45 @@ import { useToast } from '../context/ToastProvider';
 import { Turnstile } from '@marsidev/react-turnstile';
 
 export default function Login() {
-    // UI Modes
     const [portalMode, setPortalMode] = useState(localStorage.getItem('univac_last_portal_mode') || 'customer');
     const [isSignUp, setIsSignUp] = useState(false);
-    const [isForgotPassword, setIsForgotPassword] = useState(false); // <-- NEW STATE
+    const [isForgotPassword, setIsForgotPassword] = useState(false);
 
-    // Auth State
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [fullName, setFullName] = useState('');
 
-    // Security & System State
     const [loading, setLoading] = useState(false);
     const [captchaToken, setCaptchaToken] = useState(null);
     const [showExpiredModal, setShowExpiredModal] = useState(false);
     const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light');
 
-    // Lockout State
+    // --- NEW: DYNAMIC BRANDING STATE ---
+    const [shopSettings, setShopSettings] = useState(null);
+
     const [isLockedOut, setIsLockedOut] = useState(false);
     const [lockoutTimeRemaining, setLockoutTimeRemaining] = useState(0);
 
-    // Refs
     const navigate = useNavigate();
     const { addToast } = useToast();
     const clickCountRef = useRef(0);
     const clickTimeoutRef = useRef(null);
-    const turnstileRef = useRef(null); 
+    const turnstileRef = useRef(null);
 
     const isLocked = !captchaToken || isLockedOut;
 
-    // --- LOCKOUT LOGIC ---
     useEffect(() => {
         checkLockoutStatus();
+        fetchShopSettings(); // <-- Fetch settings on load
         const interval = setInterval(checkLockoutStatus, 1000);
         return () => clearInterval(interval);
     }, [portalMode]);
+
+    // --- FETCH BRANDING ---
+    async function fetchShopSettings() {
+        const { data } = await supabase.from('shop_settings').select('shop_name, logo_url').eq('id', 1).single();
+        if (data) setShopSettings(data);
+    }
 
     const checkLockoutStatus = () => {
         const lockKey = `univac_lock_${portalMode}`;
@@ -139,7 +143,6 @@ export default function Login() {
         setTheme(prev => prev === 'light' ? 'dark' : 'light');
     };
 
-    // --- AUTHENTICATION HANDLER ---
     const handleAuth = async (e) => {
         e.preventDefault();
         if (loading || isLockedOut) return;
@@ -152,10 +155,9 @@ export default function Login() {
         setLoading(true);
 
         try {
-            // --- NEW: FORGOT PASSWORD FLOW ---
             if (isForgotPassword) {
                 const { error } = await supabase.auth.resetPasswordForEmail(email, {
-                    redirectTo: `${window.location.origin}/update-password`, // This routes to our new page!
+                    redirectTo: `${window.location.origin}/update-password`,
                     captchaToken: captchaToken
                 });
                 if (error) {
@@ -170,7 +172,6 @@ export default function Login() {
                 return;
             }
 
-            // --- SIGN UP FLOW ---
             if (isSignUp && portalMode === 'customer') {
                 const { error } = await supabase.auth.signUp({
                     email,
@@ -184,8 +185,7 @@ export default function Login() {
                     addToast("Success! Please check your email for the confirmation link.", "success");
                     setIsSignUp(false);
                 }
-            } 
-            // --- SIGN IN FLOW ---
+            }
             else {
                 const { data: authData, error } = await supabase.auth.signInWithPassword({
                     email, password, options: { captchaToken: captchaToken }
@@ -230,10 +230,15 @@ export default function Login() {
         return `${m}:${s.toString().padStart(2, '0')}`;
     };
 
+    // Calculate dynamic branding text
+    const shopNameStr = shopSettings?.shop_name || 'University Vacuum & Sewing';
+    const nameParts = shopNameStr.trim().split(' ');
+    const firstWord = nameParts[0];
+    const restOfName = nameParts.slice(1).join(' ');
+
     return (
         <div className="min-h-screen flex items-center justify-center bg-[var(--bg-subtle)] relative overflow-hidden transition-colors duration-300 px-4">
 
-            {/* --- SESSION EXPIRED MODAL --- */}
             {showExpiredModal && (
                 <div className="fixed inset-0 z-[9999] flex items-center justify-center animate-fade-in" onClick={handleCloseModal}>
                     <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-all duration-500"></div>
@@ -252,14 +257,12 @@ export default function Login() {
                 </div>
             )}
 
-            {/* --- THEME TOGGLE --- */}
             <div className="absolute top-4 right-4 z-50">
                 <button onClick={toggleTheme} className="btn btn-circle btn-ghost w-14 h-14 text-[var(--text-muted)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-main)] transition-all shadow-sm border border-transparent hover:border-[var(--border-color)]" title="Toggle Theme">
                     {theme === 'light' ? <Moon size={24} /> : <Sun size={24} />}
                 </button>
             </div>
 
-            {/* Abstract Background Elements */}
             <div className={`absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full blur-[120px] pointer-events-none transition-colors duration-1000 ${isCustomer ? 'bg-emerald-500/20' : 'bg-indigo-500/20'}`}></div>
             <div className={`absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full blur-[120px] pointer-events-none transition-colors duration-1000 ${isCustomer ? 'bg-teal-500/20' : 'bg-purple-500/20'}`}></div>
 
@@ -269,7 +272,6 @@ export default function Login() {
 
                 <div className="p-8 sm:p-10">
 
-                    {/* PORTAL TOGGLE */}
                     <div className="flex bg-[var(--bg-subtle)] p-1.5 rounded-xl mb-8 shadow-inner border border-[var(--border-color)] animate-fade-in-up">
                         <button
                             type="button"
@@ -288,21 +290,37 @@ export default function Login() {
                     </div>
 
                     <div className="flex flex-col items-center text-center mb-8 animate-fade-in-up">
-                        <div
-                            onClick={handleSecretOverride}
-                            className={`w-16 h-16 rounded-2xl flex items-center justify-center text-white shadow-xl mb-5 transition-colors duration-500 cursor-pointer hover:scale-105 active:scale-95 ${isCustomer ? 'bg-gradient-to-br from-emerald-400 to-teal-600 shadow-emerald-500/30' : 'bg-gradient-to-br from-indigo-500 to-purple-600 shadow-indigo-500/30'}`}
-                            title={isLockedOut ? "Admin Override (Tap 5 times to reset lock)" : "University Vac & Sew"}
-                        >
-                            {isForgotPassword ? <KeyRound size={32} /> : (isCustomer ? <Package size={32} fill="currentColor" /> : <Wrench size={32} fill="currentColor" />)}
-                        </div>
+                        {/* --- DYNAMIC LOGO --- */}
+                        {shopSettings?.logo_url ? (
+                            <img
+                                src={shopSettings.logo_url}
+                                alt="Shop Logo"
+                                className="h-20 w-auto mb-4 object-contain cursor-pointer"
+                                onClick={handleSecretOverride}
+                                onError={(e) => { e.target.style.display = 'none'; }}
+                            />
+                        ) : (
+                            <div
+                                onClick={handleSecretOverride}
+                                className={`w-16 h-16 rounded-2xl flex items-center justify-center text-white shadow-xl mb-5 transition-colors duration-500 cursor-pointer hover:scale-105 active:scale-95 ${isCustomer ? 'bg-gradient-to-br from-emerald-400 to-teal-600 shadow-emerald-500/30' : 'bg-gradient-to-br from-indigo-500 to-purple-600 shadow-indigo-500/30'}`}
+                                title={isLockedOut ? "Admin Override (Tap 5 times to reset lock)" : "System Login"}
+                            >
+                                {isForgotPassword ? <KeyRound size={32} /> : (isCustomer ? <Package size={32} fill="currentColor" /> : <Wrench size={32} fill="currentColor" />)}
+                            </div>
+                        )}
+
                         <h1 className="text-2xl sm:text-3xl font-black text-[var(--text-main)] tracking-tight leading-none mb-2">
-                            {isForgotPassword ? 'Reset Password' : <>University <span className={`transition-colors duration-500 ${isCustomer ? 'text-emerald-500' : 'text-indigo-500'}`}>Vac & Sew</span></>}
+                            {isForgotPassword ? 'Reset Password' : (
+                                <>
+                                    {firstWord} <span className={`transition-colors duration-500 ${isCustomer ? 'text-emerald-500' : 'text-indigo-500'}`}>{restOfName}</span>
+                                </>
+                            )}
                         </h1>
                         <p className="text-xs font-bold text-[var(--text-muted)] mt-1">
-                            {isForgotPassword 
-                                ? 'Enter your email to receive a recovery link.' 
-                                : isCustomer 
-                                    ? (isSignUp ? 'Create your repair account' : 'Track your active repairs') 
+                            {isForgotPassword
+                                ? 'Enter your email to receive a recovery link.'
+                                : isCustomer
+                                    ? (isSignUp ? 'Create your repair account' : 'Track your active repairs')
                                     : 'Authorized personnel login'
                             }
                         </p>
@@ -375,7 +393,7 @@ export default function Login() {
                         >
                             {loading ? <span className="loading loading-spinner"></span> : (
                                 <>
-                                    {isForgotPassword ? 'Send Reset Link' : (isSignUp ? 'Create Account' : 'Secure Login')} 
+                                    {isForgotPassword ? 'Send Reset Link' : (isSignUp ? 'Create Account' : 'Secure Login')}
                                     <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
                                 </>
                             )}
@@ -406,7 +424,7 @@ export default function Login() {
                 </div>
             </div>
             <div className="absolute bottom-6 text-center w-full z-0">
-                <p className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] opacity-50">© 2026 University Vacuum & Sewing System</p>
+                <p className="text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] opacity-50">© {new Date().getFullYear()} {shopNameStr}</p>
             </div>
         </div>
     );

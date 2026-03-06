@@ -5,8 +5,19 @@ import Navbar from '../components/Navbar';
 import {
     User, Store, Shield, Save, Lock, Building2, Percent, Phone, MapPin,
     Clock, DollarSign, FileText, MessageSquare, PlusCircle, Trash2,
-    Database, Download, BellRing, Scale, AlertTriangle, PackageMinus, RotateCcw
+    Database, Download, BellRing, Scale, AlertTriangle, PackageMinus, RotateCcw, ImageIcon, CalendarDays, X, ClipboardList, Laptop, Tag, Search, Filter
 } from 'lucide-react';
+
+const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+const CORE_STATUSES = [
+    { id: 'intake', label: 'In Queue (Intake)' },
+    { id: 'diagnosing', label: 'Diagnosing' },
+    { id: 'waiting_parts', label: 'Waiting on Parts' },
+    { id: 'repairing', label: 'Repairing' },
+    { id: 'ready_pickup', label: 'Ready for Pickup' },
+    { id: 'completed', label: 'Completed' }
+];
 
 export default function Settings() {
     const { addToast } = useToast();
@@ -24,18 +35,28 @@ export default function Settings() {
         shop_name: '', shop_address: '', shop_phone: '', tax_rate: '',
         default_labor_rate: '', receipt_disclaimer: '', business_hours: '',
         quick_replies: [], auto_email_status_change: true, auto_email_new_message: true,
-        intake_terms: ''
+        intake_terms: '', logo_url: '', estimate_valid_days: 30,
+        status_email_template: '', message_email_template: '',
+        operating_days: [], default_ticket_desc: '', custom_statuses: []
     });
 
     const [replyToDelete, setReplyToDelete] = useState(null);
+    const [showLogoPreview, setShowLogoPreview] = useState(false);
+
+    // Catalog State
+    const [deviceCatalog, setDeviceCatalog] = useState([]);
+    const [newDevice, setNewDevice] = useState({ brand: '', model: '' });
+    const [catalogSearch, setCatalogSearch] = useState('');
+    const [catalogBrandFilter, setCatalogBrandFilter] = useState('ALL');
 
     // Danger Zone State
-    const [dangerAction, setDangerAction] = useState(null); // 'tickets' | 'inventory' | null
+    const [dangerAction, setDangerAction] = useState(null);
     const [dangerInput, setDangerInput] = useState('');
     const [isExecutingDanger, setIsExecutingDanger] = useState(false);
 
     useEffect(() => {
         fetchData();
+        fetchCatalog();
     }, []);
 
     async function fetchData() {
@@ -60,17 +81,31 @@ export default function Settings() {
                     quick_replies: settings.quick_replies || [],
                     auto_email_status_change: settings.auto_email_status_change ?? true,
                     auto_email_new_message: settings.auto_email_new_message ?? true,
-                    intake_terms: settings.intake_terms || ''
+                    intake_terms: settings.intake_terms || '',
+                    logo_url: settings.logo_url || '',
+                    estimate_valid_days: settings.estimate_valid_days || 30,
+                    status_email_template: settings.status_email_template || 'Your repair ticket (#{{ticket_id}}) has been updated to: {{status}}.',
+                    message_email_template: settings.message_email_template || 'A technician left a new message regarding your repair:\n\n"{{message}}"',
+                    operating_days: settings.operating_days || ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+                    default_ticket_desc: settings.default_ticket_desc || '',
+                    custom_statuses: settings.custom_statuses || []
                 });
             }
         }
         setLoading(false);
     }
 
-    const addQuickReply = () => {
-        setShopForm({ ...shopForm, quick_replies: [...shopForm.quick_replies, { label: '', text: '' }] });
-    };
+    async function fetchCatalog() {
+        const { data } = await supabase
+            .from('device_catalog')
+            .select('*')
+            .order('brand', { ascending: true })
+            .order('model', { ascending: true });
+        if (data) setDeviceCatalog(data);
+    }
 
+    // --- HELPER FUNCTIONS ---
+    const addQuickReply = () => { setShopForm({ ...shopForm, quick_replies: [...shopForm.quick_replies, { label: '', text: '' }] }); };
     const executeDeleteReply = () => {
         if (replyToDelete === null) return;
         const newReplies = [...shopForm.quick_replies];
@@ -79,11 +114,122 @@ export default function Settings() {
         setReplyToDelete(null);
         addToast("Reply removed. Remember to save changes.", "info");
     };
-
     const updateQuickReply = (index, field, value) => {
         const newReplies = [...shopForm.quick_replies];
         newReplies[index][field] = value;
         setShopForm({ ...shopForm, quick_replies: newReplies });
+    };
+
+    const toggleOperatingDay = (day) => {
+        const current = shopForm.operating_days || [];
+        if (current.includes(day)) {
+            setShopForm({ ...shopForm, operating_days: current.filter(d => d !== day) });
+        } else {
+            setShopForm({ ...shopForm, operating_days: [...current, day] });
+        }
+    };
+
+    const addCustomStatus = () => { setShopForm({ ...shopForm, custom_statuses: [...shopForm.custom_statuses, ''] }); };
+    const updateCustomStatus = (index, value) => {
+        const newStatuses = [...shopForm.custom_statuses];
+        newStatuses[index] = value;
+        setShopForm({ ...shopForm, custom_statuses: newStatuses });
+    };
+    const removeCustomStatus = (index) => {
+        const newStatuses = [...shopForm.custom_statuses];
+        newStatuses.splice(index, 1);
+        setShopForm({ ...shopForm, custom_statuses: newStatuses });
+    };
+
+    const handleAddCatalogDevice = async () => {
+        const brandTrimmed = newDevice.brand.trim();
+        const modelTrimmed = newDevice.model.trim();
+
+        // 1. Check for empty fields
+        if (!brandTrimmed || !modelTrimmed) {
+            addToast('Both Brand and Model are required.', 'error');
+            return;
+        }
+
+        // 2. Check for duplicates
+        const exists = deviceCatalog.some(d =>
+            d.brand.toLowerCase() === brandTrimmed.toLowerCase() &&
+            d.model.toLowerCase() === modelTrimmed.toLowerCase()
+        );
+
+        if (exists) {
+            addToast('This device already exists in the catalog.', 'error');
+            return;
+        }
+
+        const { data, error } = await supabase.from('device_catalog').insert([{ brand: brandTrimmed, model: modelTrimmed }]).select().single();
+        if (error) {
+            addToast('Error adding device to catalog', 'error');
+        } else {
+            setDeviceCatalog([...deviceCatalog, data].sort((a, b) => a.brand.localeCompare(b.brand)));
+            setNewDevice({ brand: '', model: '' });
+            addToast('Device added to auto-complete catalog', 'success');
+        }
+    };
+
+    const handleDeleteCatalogDevice = async (id) => {
+        const { error } = await supabase.from('device_catalog').delete().eq('id', id);
+        if (error) {
+            addToast('Failed to delete device', 'error');
+        } else {
+            setDeviceCatalog(deviceCatalog.filter(d => d.id !== id));
+            addToast('Device removed from catalog', 'success');
+        }
+    };
+
+    // --- SAVE FUNCTIONS ---
+    const handleSavePersonal = async () => {
+        setSaving(true);
+        const { error } = await supabase.from('profiles').update({ full_name: profileForm.full_name }).eq('id', currentUser.id);
+        if (error) addToast("Failed to update profile", "error"); else addToast("Profile updated successfully", "success");
+        setSaving(false);
+    };
+
+    const handleSaveShop = async () => {
+        if (currentUser?.role !== 'admin') { addToast("Only administrators can update shop settings.", "error"); return; }
+        setSaving(true);
+
+        const taxRateDecimal = parseFloat(shopForm.tax_rate || 0) / 100;
+        const laborRate = parseFloat(shopForm.default_labor_rate || 0);
+        const estimateDays = parseInt(shopForm.estimate_valid_days || 30);
+
+        const cleanedStatuses = shopForm.custom_statuses.filter(s => s.trim() !== '');
+
+        const { error } = await supabase.from('shop_settings').update({
+            shop_name: shopForm.shop_name,
+            shop_address: shopForm.shop_address,
+            shop_phone: shopForm.shop_phone,
+            tax_rate: taxRateDecimal,
+            default_labor_rate: laborRate,
+            receipt_disclaimer: shopForm.receipt_disclaimer,
+            business_hours: shopForm.business_hours,
+            quick_replies: shopForm.quick_replies,
+            auto_email_status_change: shopForm.auto_email_status_change,
+            auto_email_new_message: shopForm.auto_email_new_message,
+            intake_terms: shopForm.intake_terms,
+            logo_url: shopForm.logo_url,
+            estimate_valid_days: estimateDays,
+            status_email_template: shopForm.status_email_template,
+            message_email_template: shopForm.message_email_template,
+            operating_days: shopForm.operating_days,
+            default_ticket_desc: shopForm.default_ticket_desc,
+            custom_statuses: cleanedStatuses,
+            updated_at: new Date()
+        }).eq('id', 1);
+
+        if (error) {
+            console.error(error);
+            addToast(`Error: ${error.message}`, "error");
+        } else {
+            setShopForm({ ...shopForm, custom_statuses: cleanedStatuses });
+            addToast("Shop settings updated successfully", "success");
+        }
+        setSaving(false);
     };
 
     const handleExecuteDanger = async () => {
@@ -92,32 +238,17 @@ export default function Settings() {
             if (dangerAction === 'tickets') {
                 const ninetyDaysAgo = new Date();
                 ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-
-                const { error } = await supabase
-                    .from('tickets')
-                    .delete()
-                    .eq('status', 'completed')
-                    .lt('created_at', ninetyDaysAgo.toISOString());
-
+                const { error } = await supabase.from('tickets').delete().eq('status', 'completed').lt('created_at', ninetyDaysAgo.toISOString());
                 if (error) throw error;
                 addToast(`Successfully deleted old completed tickets.`, "success");
             } else if (dangerAction === 'inventory') {
-                const { error } = await supabase
-                    .from('inventory')
-                    .update({ quantity: 0 })
-                    .gt('quantity', 0);
-
+                const { error } = await supabase.from('inventory').update({ quantity: 0 }).gt('quantity', 0);
                 if (error) throw error;
                 addToast("All inventory counts have been reset to zero.", "success");
             }
         } catch (error) {
-            console.error(error);
             addToast("Action failed: " + error.message, "error");
-        } finally {
-            setIsExecutingDanger(false);
-            setDangerAction(null);
-            setDangerInput('');
-        }
+        } finally { setIsExecutingDanger(false); setDangerAction(null); setDangerInput(''); }
     };
 
     const handleExportData = async () => {
@@ -132,58 +263,27 @@ export default function Settings() {
             const url = URL.createObjectURL(blob);
             const link = document.createElement("a"); link.setAttribute("href", url); link.setAttribute("download", `Shop_Export_${new Date().toISOString().split('T')[0]}.csv`); document.body.appendChild(link); link.click(); document.body.removeChild(link);
             addToast("Database exported successfully!", "success");
-        } catch (err) { console.error(err); addToast("Failed to export data.", "error"); } finally { setExporting(false); }
-    };
-
-    const handleSavePersonal = async () => {
-        setSaving(true);
-        const { error } = await supabase.from('profiles').update({ full_name: profileForm.full_name }).eq('id', currentUser.id);
-        if (error) addToast("Failed to update profile", "error"); else addToast("Profile updated successfully", "success");
-        setSaving(false);
-    };
-
-    const handleSaveShop = async () => {
-        if (currentUser?.role !== 'admin') { addToast("Only administrators can update shop settings.", "error"); return; }
-        setSaving(true);
-
-        const taxRateDecimal = parseFloat(shopForm.tax_rate || 0) / 100;
-        const laborRate = parseFloat(shopForm.default_labor_rate || 0);
-
-        const { error } = await supabase.from('shop_settings').update({
-            shop_name: shopForm.shop_name,
-            shop_address: shopForm.shop_address,
-            shop_phone: shopForm.shop_phone,
-            tax_rate: taxRateDecimal,
-            default_labor_rate: laborRate,
-            receipt_disclaimer: shopForm.receipt_disclaimer,
-            business_hours: shopForm.business_hours,
-            quick_replies: shopForm.quick_replies,
-            auto_email_status_change: shopForm.auto_email_status_change,
-            auto_email_new_message: shopForm.auto_email_new_message,
-            intake_terms: shopForm.intake_terms,
-            updated_at: new Date()
-        }).eq('id', 1);
-
-        if (error) {
-            console.error(error);
-            addToast(`Error: ${error.message}`, "error");
-        } else {
-            addToast("Shop settings updated successfully", "success");
-        }
-        setSaving(false);
+        } catch (err) { addToast("Failed to export data.", "error"); } finally { setExporting(false); }
     };
 
     const isAdmin = currentUser?.role === 'admin';
     if (loading) return <div className="flex justify-center mt-20"><span className="loading loading-spinner loading-lg text-indigo-500"></span></div>;
 
+    // Computed properties for catalog display
+    const uniqueCatalogBrands = [...new Set(deviceCatalog.map(d => d.brand))].sort();
+    const filteredCatalog = deviceCatalog.filter(d => {
+        const matchesSearch = d.brand.toLowerCase().includes(catalogSearch.toLowerCase()) ||
+            d.model.toLowerCase().includes(catalogSearch.toLowerCase());
+        const matchesBrand = catalogBrandFilter === 'ALL' || d.brand === catalogBrandFilter;
+        return matchesSearch && matchesBrand;
+    });
+
     return (
         <div className="min-h-screen p-4 md:p-6 font-sans transition-colors duration-300 pb-24">
 
-            {/* GLOBAL NAVBAR INJECTED HERE */}
             <Navbar />
 
             <div className="max-w-5xl mx-auto space-y-6">
-
                 <div className="flex flex-col md:flex-row gap-8 items-start animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
 
                     {/* LEFT SIDEBAR MENU */}
@@ -238,29 +338,32 @@ export default function Settings() {
                                         <h2 className="text-2xl font-black text-[var(--text-main)] flex items-center gap-3"><Store className="text-indigo-500" /> Operations & Finance</h2>
                                     </div>
                                 </div>
+
                                 <div className="p-6 md:p-8 space-y-8 bg-[var(--bg-subtle)]">
-                                    <div className="p-6 bg-[var(--bg-surface)] rounded-2xl border border-[var(--border-color)] shadow-sm">
-                                        <h3 className="text-xs font-black uppercase tracking-widest text-[var(--text-main)] mb-5 flex items-center gap-2 border-b border-[var(--border-color)] pb-3"><Percent size={16} className="text-indigo-500" /> Financial Settings</h3>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                            <div className="form-control">
-                                                <label className="label text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] pl-1">Sales Tax Rate (%)</label>
-                                                <div className="relative group">
-                                                    <input type="number" step="0.01" value={shopForm.tax_rate} onChange={(e) => setShopForm({ ...shopForm, tax_rate: e.target.value })} className="input input-bordered w-full h-12 pr-11 bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] font-mono font-black text-lg shadow-inner focus:border-indigo-500 transition-all rounded-xl" />
-                                                    <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-[var(--text-muted)] font-black text-lg">%</div>
+
+                                    {/* SECTION 1: IDENTITY & CONTACT */}
+                                    <div className="p-6 bg-[var(--bg-surface)] rounded-2xl border border-[var(--border-color)] shadow-sm space-y-5">
+                                        <h3 className="text-xs font-black uppercase tracking-widest text-[var(--text-main)] mb-4 flex items-center gap-2 border-b border-[var(--border-color)] pb-3"><Building2 size={16} className="text-indigo-500" /> Identity & Contact</h3>
+
+                                        <div className="form-control">
+                                            <label className="label text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] pl-1">Company Logo URL (Optional)</label>
+                                            <div className="relative group flex gap-3 items-center">
+                                                <div className="relative flex-1">
+                                                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-[var(--text-muted)]"><ImageIcon size={16} /></div>
+                                                    <input type="text" placeholder="https://example.com/logo.png" value={shopForm.logo_url} onChange={(e) => setShopForm({ ...shopForm, logo_url: e.target.value })} className="input input-bordered w-full h-12 pl-11 bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] font-medium shadow-inner focus:border-indigo-500 transition-all rounded-xl" />
                                                 </div>
-                                            </div>
-                                            <div className="form-control">
-                                                <label className="label text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] pl-1">Default Labor Rate (per hr)</label>
-                                                <div className="relative group">
-                                                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-[var(--text-muted)]"><DollarSign size={18} /></div>
-                                                    <input type="number" step="0.01" value={shopForm.default_labor_rate} onChange={(e) => setShopForm({ ...shopForm, default_labor_rate: e.target.value })} className="input input-bordered w-full h-12 pl-10 bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] font-mono font-black text-lg shadow-inner focus:border-emerald-500 transition-all rounded-xl" />
-                                                </div>
+                                                {shopForm.logo_url && (
+                                                    <div
+                                                        className="w-12 h-12 rounded-xl border border-[var(--border-color)] bg-white flex items-center justify-center overflow-hidden p-1 shadow-sm cursor-pointer hover:ring-2 hover:ring-indigo-500 hover:scale-105 transition-all"
+                                                        onClick={() => setShowLogoPreview(true)}
+                                                        title="Click to enlarge"
+                                                    >
+                                                        <img src={shopForm.logo_url} alt="Logo Preview" className="max-w-full max-h-full object-contain" onError={(e) => e.target.style.display = 'none'} />
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
-                                    </div>
 
-                                    <div className="p-6 bg-[var(--bg-surface)] rounded-2xl border border-[var(--border-color)] shadow-sm space-y-5">
-                                        <h3 className="text-xs font-black uppercase tracking-widest text-[var(--text-main)] mb-4 flex items-center gap-2 border-b border-[var(--border-color)] pb-3"><Building2 size={16} className="text-indigo-500" /> Identity & Policies</h3>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                             <div className="form-control">
                                                 <label className="label text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] pl-1">Shop Name</label>
@@ -277,34 +380,140 @@ export default function Settings() {
                                                 </div>
                                             </div>
                                         </div>
-                                        <div className="form-control">
-                                            <label className="label text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] pl-1">Business Hours</label>
-                                            <div className="relative group">
-                                                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-[var(--text-muted)]"><Clock size={16} /></div>
-                                                <input type="text" value={shopForm.business_hours} onChange={(e) => setShopForm({ ...shopForm, business_hours: e.target.value })} className="input input-bordered w-full h-12 pl-11 bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] font-medium shadow-inner focus:border-indigo-500 transition-all rounded-xl" />
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                            <div className="form-control">
+                                                <label className="label text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] pl-1">Business Hours String</label>
+                                                <div className="relative group">
+                                                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-[var(--text-muted)]"><Clock size={16} /></div>
+                                                    <input type="text" value={shopForm.business_hours} onChange={(e) => setShopForm({ ...shopForm, business_hours: e.target.value })} placeholder="e.g. Mon-Fri 9am-5pm" className="input input-bordered w-full h-12 pl-11 bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] font-medium shadow-inner focus:border-indigo-500 transition-all rounded-xl" />
+                                                </div>
+                                            </div>
+                                            <div className="form-control">
+                                                <label className="label text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] pl-1 mb-1">Operating Days</label>
+                                                <div className="flex flex-wrap gap-1.5">
+                                                    {DAYS_OF_WEEK.map(day => {
+                                                        const isActive = shopForm.operating_days.includes(day);
+                                                        return (
+                                                            <button
+                                                                key={day}
+                                                                type="button"
+                                                                onClick={() => toggleOperatingDay(day)}
+                                                                className={`px-3 py-1.5 rounded-lg text-[11px] font-black transition-all ${isActive ? 'bg-indigo-500 text-white shadow-md shadow-indigo-500/30' : 'bg-[var(--bg-subtle)] text-[var(--text-muted)] border border-[var(--border-color)] hover:border-indigo-300'}`}
+                                                            >
+                                                                {day.substring(0, 3)}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
                                             </div>
                                         </div>
+
                                         <div className="form-control">
                                             <label className="label text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] pl-1">Physical Address</label>
                                             <div className="relative group">
                                                 <div className="absolute inset-y-0 left-0 pl-4 pt-3.5 pointer-events-none text-[var(--text-muted)]"><MapPin size={16} /></div>
-                                                <textarea value={shopForm.shop_address} onChange={(e) => setShopForm({ ...shopForm, shop_address: e.target.value })} className="textarea textarea-bordered w-full h-24 pl-11 pt-3.5 bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] font-medium shadow-inner focus:border-indigo-500 transition-all rounded-xl resize-none"></textarea>
+                                                <textarea value={shopForm.shop_address} onChange={(e) => setShopForm({ ...shopForm, shop_address: e.target.value })} className="textarea textarea-bordered w-full h-20 pl-11 pt-3.5 bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] font-medium shadow-inner focus:border-indigo-500 transition-all rounded-xl resize-none"></textarea>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* SECTION 2: FINANCIAL & POLICIES */}
+                                    <div className="p-6 bg-[var(--bg-surface)] rounded-2xl border border-[var(--border-color)] shadow-sm">
+                                        <h3 className="text-xs font-black uppercase tracking-widest text-[var(--text-main)] mb-5 flex items-center gap-2 border-b border-[var(--border-color)] pb-3"><Percent size={16} className="text-emerald-500" /> Financial & Policies</h3>
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                                            <div className="form-control">
+                                                <label className="label text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] pl-1">Sales Tax Rate (%)</label>
+                                                <div className="relative group">
+                                                    <input type="number" step="0.01" value={shopForm.tax_rate} onChange={(e) => setShopForm({ ...shopForm, tax_rate: e.target.value })} className="input input-bordered w-full h-12 pr-11 bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] font-mono font-black text-lg shadow-inner focus:border-indigo-500 transition-all rounded-xl" />
+                                                    <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-[var(--text-muted)] font-black text-lg">%</div>
+                                                </div>
+                                            </div>
+                                            <div className="form-control">
+                                                <label className="label text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] pl-1">Labor Rate (per hr)</label>
+                                                <div className="relative group">
+                                                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-[var(--text-muted)]"><DollarSign size={18} /></div>
+                                                    <input type="number" step="0.01" value={shopForm.default_labor_rate} onChange={(e) => setShopForm({ ...shopForm, default_labor_rate: e.target.value })} className="input input-bordered w-full h-12 pl-10 bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] font-mono font-black text-lg shadow-inner focus:border-emerald-500 transition-all rounded-xl" />
+                                                </div>
+                                            </div>
+                                            <div className="form-control">
+                                                <label className="label text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] pl-1">Estimate Validity</label>
+                                                <div className="relative group">
+                                                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-[var(--text-muted)]"><CalendarDays size={16} /></div>
+                                                    <input type="number" value={shopForm.estimate_valid_days} onChange={(e) => setShopForm({ ...shopForm, estimate_valid_days: e.target.value })} className="input input-bordered w-full h-12 pl-11 pr-12 bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] font-mono font-black text-lg shadow-inner focus:border-indigo-500 transition-all rounded-xl" />
+                                                    <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-[var(--text-muted)] font-bold text-xs uppercase tracking-widest">Days</div>
+                                                </div>
                                             </div>
                                         </div>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                             <div className="form-control">
                                                 <label className="label text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] pl-1 flex items-center gap-1.5"><FileText size={12} /> Receipt Disclaimer</label>
-                                                <textarea value={shopForm.receipt_disclaimer} onChange={(e) => setShopForm({ ...shopForm, receipt_disclaimer: e.target.value })} placeholder="Printed at the bottom of customer receipts..." className="textarea textarea-bordered w-full h-32 p-4 bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] font-medium shadow-inner focus:border-indigo-500 transition-all rounded-xl resize-none text-xs leading-relaxed"></textarea>
+                                                <textarea value={shopForm.receipt_disclaimer} onChange={(e) => setShopForm({ ...shopForm, receipt_disclaimer: e.target.value })} placeholder="Printed at the bottom of customer receipts..." className="textarea textarea-bordered w-full h-24 p-4 bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] font-medium shadow-inner focus:border-indigo-500 transition-all rounded-xl resize-none text-xs leading-relaxed"></textarea>
                                             </div>
                                             <div className="form-control">
                                                 <label className="label text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] pl-1 flex items-center gap-1.5"><Scale size={12} /> Intake Terms of Service</label>
-                                                <textarea value={shopForm.intake_terms} onChange={(e) => setShopForm({ ...shopForm, intake_terms: e.target.value })} placeholder="Legal agreement shown when creating a new ticket..." className="textarea textarea-bordered w-full h-32 p-4 bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] font-medium shadow-inner focus:border-amber-500 transition-all rounded-xl resize-none text-xs leading-relaxed"></textarea>
+                                                <textarea value={shopForm.intake_terms} onChange={(e) => setShopForm({ ...shopForm, intake_terms: e.target.value })} placeholder="Legal agreement shown when creating a new ticket..." className="textarea textarea-bordered w-full h-24 p-4 bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] font-medium shadow-inner focus:border-amber-500 transition-all rounded-xl resize-none text-xs leading-relaxed"></textarea>
                                             </div>
                                         </div>
                                     </div>
+
+                                    {/* SECTION 3: INTAKE & WORKFLOW */}
+                                    <div className="p-6 bg-[var(--bg-surface)] rounded-2xl border border-[var(--border-color)] shadow-sm space-y-5">
+                                        <h3 className="text-xs font-black uppercase tracking-widest text-[var(--text-main)] mb-4 flex items-center gap-2 border-b border-[var(--border-color)] pb-3"><ClipboardList size={16} className="text-amber-500" /> Intake & Workflow</h3>
+
+                                        <div className="form-control">
+                                            <label className="label text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] pl-1">Default Ticket Description (Boilerplate)</label>
+                                            <textarea
+                                                value={shopForm.default_ticket_desc}
+                                                onChange={(e) => setShopForm({ ...shopForm, default_ticket_desc: e.target.value })}
+                                                placeholder="- Included Accessories: Power cord\n- Passcode: \n- Initial Condition: Scratches on side"
+                                                className="textarea textarea-bordered w-full h-24 p-4 bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] font-medium shadow-inner focus:border-indigo-500 transition-all rounded-xl resize-y text-sm leading-relaxed"
+                                            ></textarea>
+                                        </div>
+
+                                        <div className="pt-2">
+                                            <label className="label text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)] pl-1 mb-1">Ticket Statuses</label>
+                                            <p className="text-xs text-[var(--text-muted)] font-medium mb-3 pl-1">Core system statuses are locked. Add custom workflow stages below.</p>
+
+                                            <div className="space-y-3">
+                                                {/* Core Statuses Display */}
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                                                    {CORE_STATUSES.map(status => (
+                                                        <div key={status.id} className="flex items-center gap-3 opacity-60 grayscale-[0.5] bg-[var(--bg-subtle)] p-2 rounded-xl border border-[var(--border-color)]">
+                                                            <div className="w-2.5 h-2.5 rounded-full bg-slate-500 shadow-sm ml-2"></div>
+                                                            <span className="flex-1 font-bold text-sm text-[var(--text-main)] cursor-not-allowed">{status.label}</span>
+                                                            <Lock size={14} className="text-[var(--text-muted)] mr-2" />
+                                                        </div>
+                                                    ))}
+                                                </div>
+
+                                                <div className="border-t border-dashed border-[var(--border-color)] my-4 pt-4"></div>
+
+                                                {/* Custom Statuses Edit */}
+                                                {shopForm.custom_statuses.map((status, index) => (
+                                                    <div key={index} className="flex items-center gap-3">
+                                                        <div className="w-2.5 h-2.5 rounded-full bg-indigo-500 shadow-sm ml-2 flex-none"></div>
+                                                        <input
+                                                            type="text"
+                                                            className="input input-sm h-11 input-bordered flex-1 bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] focus:border-indigo-500 transition-all rounded-lg font-bold text-sm text-[var(--text-main)] shadow-inner"
+                                                            placeholder="e.g. Sent to Manufacturer"
+                                                            value={status}
+                                                            onChange={(e) => updateCustomStatus(index, e.target.value)}
+                                                        />
+                                                        <button type="button" onClick={() => removeCustomStatus(index)} className="btn btn-square btn-ghost text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all flex-none"><Trash2 size={16} /></button>
+                                                    </div>
+                                                ))}
+                                                <button type="button" onClick={addCustomStatus} className="btn btn-sm btn-ghost gap-2 text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 font-bold ml-1 mt-2">
+                                                    <PlusCircle size={16} /> Add Custom Status
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                    </div>
+
                                     <div className="pt-2 flex justify-end">
-                                        <button onClick={handleSaveShop} disabled={saving} className="btn btn-gradient text-white border-none shadow-lg shadow-indigo-500/30 px-8 rounded-xl h-12 hover:scale-105 transition-all">
-                                            {saving ? <span className="loading loading-spinner"></span> : <><Save size={18} /> Update Settings</>}
+                                        <button onClick={handleSaveShop} disabled={saving} className="btn btn-gradient text-white border-none shadow-lg shadow-indigo-500/30 px-8 rounded-xl h-14 text-base hover:scale-105 transition-all">
+                                            {saving ? <span className="loading loading-spinner"></span> : <><Save size={20} /> Save Operation Settings</>}
                                         </button>
                                     </div>
                                 </div>
@@ -320,15 +529,45 @@ export default function Settings() {
                                 <div className="p-6 md:p-8 bg-[var(--bg-subtle)] space-y-8">
                                     <div className="p-6 bg-[var(--bg-surface)] rounded-2xl border border-[var(--border-color)] shadow-sm">
                                         <h3 className="text-xs font-black uppercase tracking-widest text-[var(--text-main)] mb-5 flex items-center gap-2 border-b border-[var(--border-color)] pb-3"><BellRing size={16} className="text-amber-500" /> Automated Email Rules</h3>
-                                        <div className="space-y-4">
-                                            <label className="flex items-center justify-between cursor-pointer p-4 rounded-xl bg-[var(--bg-subtle)] border border-[var(--border-color)] hover:border-indigo-300 transition-colors shadow-inner">
-                                                <div><span className="font-bold text-sm text-[var(--text-main)] block mb-0.5">Status Updates</span><span className="text-xs text-[var(--text-muted)] font-medium">Send customer an email when their ticket status changes.</span></div>
-                                                <input type="checkbox" className="toggle toggle-success toggle-md" checked={shopForm.auto_email_status_change} onChange={(e) => setShopForm({ ...shopForm, auto_email_status_change: e.target.checked })} />
-                                            </label>
-                                            <label className="flex items-center justify-between cursor-pointer p-4 rounded-xl bg-[var(--bg-subtle)] border border-[var(--border-color)] hover:border-indigo-300 transition-colors shadow-inner">
-                                                <div><span className="font-bold text-sm text-[var(--text-main)] block mb-0.5">New Messages</span><span className="text-xs text-[var(--text-muted)] font-medium">Send customer an email when a technician sends a direct message.</span></div>
-                                                <input type="checkbox" className="toggle toggle-success toggle-md" checked={shopForm.auto_email_new_message} onChange={(e) => setShopForm({ ...shopForm, auto_email_new_message: e.target.checked })} />
-                                            </label>
+                                        <div className="space-y-6">
+
+                                            {/* Status Update Template */}
+                                            <div className="bg-[var(--bg-subtle)] border border-[var(--border-color)] rounded-xl shadow-inner overflow-hidden">
+                                                <label className="flex items-center justify-between cursor-pointer p-4 hover:bg-[var(--bg-surface)] transition-colors border-b border-[var(--border-color)]">
+                                                    <div><span className="font-bold text-sm text-[var(--text-main)] block mb-0.5">Status Updates</span><span className="text-xs text-[var(--text-muted)] font-medium">Send customer an email when their ticket status changes.</span></div>
+                                                    <input type="checkbox" className="toggle toggle-success toggle-md" checked={shopForm.auto_email_status_change} onChange={(e) => setShopForm({ ...shopForm, auto_email_status_change: e.target.checked })} />
+                                                </label>
+                                                {shopForm.auto_email_status_change && (
+                                                    <div className="p-4 bg-[var(--bg-surface)]">
+                                                        <label className="label text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] pl-1 pb-1">Message Template</label>
+                                                        <textarea
+                                                            value={shopForm.status_email_template}
+                                                            onChange={(e) => setShopForm({ ...shopForm, status_email_template: e.target.value })}
+                                                            className="textarea textarea-bordered w-full bg-[var(--bg-subtle)] text-[var(--text-main)] focus:border-indigo-500 transition-all text-sm h-24 resize-y"
+                                                        ></textarea>
+                                                        <div className="text-[10px] font-mono mt-2 text-[var(--text-muted)]">Available variables: <span className="bg-indigo-100 text-indigo-700 px-1 rounded dark:bg-indigo-900/30 dark:text-indigo-400">{`{{ticket_id}}`}</span> <span className="bg-indigo-100 text-indigo-700 px-1 rounded dark:bg-indigo-900/30 dark:text-indigo-400">{`{{status}}`}</span></div>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* New Message Template */}
+                                            <div className="bg-[var(--bg-subtle)] border border-[var(--border-color)] rounded-xl shadow-inner overflow-hidden">
+                                                <label className="flex items-center justify-between cursor-pointer p-4 hover:bg-[var(--bg-surface)] transition-colors border-b border-[var(--border-color)]">
+                                                    <div><span className="font-bold text-sm text-[var(--text-main)] block mb-0.5">New Messages</span><span className="text-xs text-[var(--text-muted)] font-medium">Send customer an email when a technician sends a direct message.</span></div>
+                                                    <input type="checkbox" className="toggle toggle-success toggle-md" checked={shopForm.auto_email_new_message} onChange={(e) => setShopForm({ ...shopForm, auto_email_new_message: e.target.checked })} />
+                                                </label>
+                                                {shopForm.auto_email_new_message && (
+                                                    <div className="p-4 bg-[var(--bg-surface)]">
+                                                        <label className="label text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] pl-1 pb-1">Message Template</label>
+                                                        <textarea
+                                                            value={shopForm.message_email_template}
+                                                            onChange={(e) => setShopForm({ ...shopForm, message_email_template: e.target.value })}
+                                                            className="textarea textarea-bordered w-full bg-[var(--bg-subtle)] text-[var(--text-main)] focus:border-indigo-500 transition-all text-sm h-24 resize-y"
+                                                        ></textarea>
+                                                        <div className="text-[10px] font-mono mt-2 text-[var(--text-muted)]">Available variables: <span className="bg-indigo-100 text-indigo-700 px-1 rounded dark:bg-indigo-900/30 dark:text-indigo-400">{`{{ticket_id}}`}</span> <span className="bg-indigo-100 text-indigo-700 px-1 rounded dark:bg-indigo-900/30 dark:text-indigo-400">{`{{message}}`}</span></div>
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                     <div className="p-6 bg-[var(--bg-surface)] rounded-2xl border border-[var(--border-color)] shadow-sm">
@@ -345,7 +584,7 @@ export default function Settings() {
                                             <button onClick={addQuickReply} className="w-full py-4 border-2 border-dashed border-[var(--border-color)] text-[var(--text-muted)] font-bold rounded-2xl hover:bg-[var(--bg-surface)] hover:text-indigo-500 hover:border-indigo-300 transition-all flex items-center justify-center gap-2 shadow-sm"><PlusCircle size={18} /> Add New Quick Reply</button>
                                         </div>
                                     </div>
-                                    <div className="pt-2 flex justify-end"><button onClick={handleSaveShop} disabled={saving} className="btn btn-gradient text-white border-none shadow-lg shadow-indigo-500/30 px-8 rounded-xl h-12 hover:scale-105 transition-all">{saving ? <span className="loading loading-spinner"></span> : <><Save size={18} /> Save Communications</>}</button></div>
+                                    <div className="pt-2 flex justify-end"><button onClick={handleSaveShop} disabled={saving} className="btn btn-gradient text-white border-none shadow-lg shadow-indigo-500/30 px-8 rounded-xl h-14 text-base hover:scale-105 transition-all">{saving ? <span className="loading loading-spinner"></span> : <><Save size={20} /> Save Communications</>}</button></div>
                                 </div>
                             </div>
                         )}
@@ -361,6 +600,67 @@ export default function Settings() {
                                 </div>
 
                                 <div className="p-6 md:p-8 bg-[var(--bg-subtle)] space-y-8">
+
+                                    {/* --- CATALOG MANAGEMENT --- */}
+                                    <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] p-6 rounded-2xl shadow-sm">
+                                        <h3 className="text-xs font-black uppercase tracking-widest text-[var(--text-main)] mb-4 flex items-center gap-2 border-b border-[var(--border-color)] pb-3">
+                                            <Laptop size={16} className="text-indigo-500" /> Device Catalog Management
+                                        </h3>
+                                        <p className="text-sm text-[var(--text-muted)] mb-5 font-medium leading-relaxed">
+                                            Manage the auto-complete suggestions that appear during ticket intake. The system learns automatically when you create tickets, but you can manually add or remove devices here.
+                                        </p>
+
+                                        {/* Add New */}
+                                        <div className="flex flex-col sm:flex-row gap-3 mb-6 p-4 bg-[var(--bg-subtle)] rounded-xl border border-[var(--border-color)] shadow-inner">
+                                            <input type="text" placeholder="Brand (e.g. Dyson)" className="input input-sm h-11 input-bordered flex-1 bg-[var(--bg-surface)] focus:border-indigo-500 font-bold text-[var(--text-main)]" value={newDevice.brand} onChange={e => setNewDevice({ ...newDevice, brand: e.target.value })} />
+                                            <input type="text" placeholder="Model (e.g. V11 Animal)" className="input input-sm h-11 input-bordered flex-1 bg-[var(--bg-surface)] focus:border-indigo-500 font-bold text-[var(--text-main)]" value={newDevice.model} onChange={e => setNewDevice({ ...newDevice, model: e.target.value })} />
+                                            <button onClick={handleAddCatalogDevice} className="btn btn-sm h-11 bg-indigo-600 hover:bg-indigo-700 text-white border-none shadow-md">Add Device</button>
+                                        </div>
+
+                                        {/* Filters & Search */}
+                                        <div className="flex flex-col sm:flex-row gap-3 mb-4">
+                                            <div className="relative flex-1">
+                                                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+                                                <input
+                                                    type="text"
+                                                    placeholder="Search catalog..."
+                                                    className="input input-sm h-10 w-full pl-9 input-bordered bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] transition-all font-medium"
+                                                    value={catalogSearch}
+                                                    onChange={(e) => setCatalogSearch(e.target.value)}
+                                                />
+                                            </div>
+                                            <div className="relative sm:w-48">
+                                                <Filter size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+                                                <select
+                                                    className="select select-sm h-10 w-full pl-9 select-bordered bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] transition-all font-bold text-xs"
+                                                    value={catalogBrandFilter}
+                                                    onChange={(e) => setCatalogBrandFilter(e.target.value)}
+                                                >
+                                                    <option value="ALL">All Brands</option>
+                                                    {uniqueCatalogBrands.map(brand => (
+                                                        <option key={brand} value={brand}>{brand}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        {/* List */}
+                                        <div className="max-h-64 overflow-y-auto custom-scrollbar border border-[var(--border-color)] rounded-xl bg-[var(--bg-surface)] divide-y divide-[var(--border-color)] shadow-inner">
+                                            {filteredCatalog.map(device => (
+                                                <div key={device.id} className="flex justify-between items-center p-3 hover:bg-[var(--bg-subtle)] transition-colors group">
+                                                    <div className="flex items-center gap-3">
+                                                        <Tag size={14} className="text-[var(--text-muted)] ml-2 flex-none" />
+                                                        <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
+                                                            <span className="font-black text-[var(--text-main)] text-sm">{device.brand}</span>
+                                                            <span className="text-[var(--text-muted)] text-xs font-bold bg-[var(--bg-subtle)] px-2 py-0.5 rounded border border-[var(--border-color)] shadow-sm">{device.model}</span>
+                                                        </div>
+                                                    </div>
+                                                    <button onClick={() => handleDeleteCatalogDevice(device.id)} className="btn btn-square btn-ghost btn-sm text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={16} /></button>
+                                                </div>
+                                            ))}
+                                            {filteredCatalog.length === 0 && <div className="p-8 text-center text-[var(--text-muted)] text-sm font-bold">No devices found.</div>}
+                                        </div>
+                                    </div>
 
                                     {/* Export Data Block */}
                                     <div className="bg-[var(--bg-surface)] border border-[var(--border-color)] p-6 rounded-2xl shadow-sm flex flex-col md:flex-row items-center justify-between gap-6 hover:border-emerald-300 transition-colors group">
@@ -445,6 +745,22 @@ export default function Settings() {
                     </div>
                 </div>
             </div>
+
+            {/* --- LOGO LIGHTBOX MODAL --- */}
+            {showLogoPreview && shopForm.logo_url && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm transition-opacity animate-fade-in" onClick={() => setShowLogoPreview(false)} />
+                    <div className="relative bg-white rounded-2xl shadow-2xl border border-[var(--border-color)] p-4 animate-pop max-w-lg w-full flex flex-col items-center">
+                        <button onClick={() => setShowLogoPreview(false)} className="absolute top-2 right-2 btn btn-sm btn-circle btn-ghost text-slate-500 hover:bg-slate-100">
+                            <X size={18} />
+                        </button>
+                        <h3 className="font-black text-slate-800 text-sm uppercase tracking-widest mb-4 w-full text-center border-b pb-2">Logo Preview</h3>
+                        <div className="w-full flex justify-center items-center bg-gray-50 rounded-xl p-8 border border-gray-200 border-dashed min-h-[200px]">
+                            <img src={shopForm.logo_url} alt="Enlarged Logo" className="max-w-full max-h-[300px] object-contain drop-shadow-md" />
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* --- QUICK REPLY DELETE MODAL --- */}
             {replyToDelete !== null && (

@@ -21,13 +21,14 @@ export default function Dashboard() {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Note: currentUser is still needed here for filtering "My Work" and checking management role for analytics
   const [currentUser, setCurrentUser] = useState({ id: null, email: '', role: '', initial: '?' });
   const [searchQuery, setSearchQuery] = useState('');
 
   const [statusFilter, setStatusFilter] = useState('ACTIVE');
   const [isScanning, setIsScanning] = useState(false);
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
+
+  const [customStatuses, setCustomStatuses] = useState([]);
 
   const [viewMode, setViewMode] = useState(() => {
     return localStorage.getItem('dashboardViewMode') || 'list';
@@ -41,6 +42,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchUserData();
+    fetchSettings();
     fetchTickets();
   }, []);
 
@@ -54,6 +56,13 @@ export default function Dashboard() {
         role: profile?.role || 'employee',
         initial: user.email.charAt(0).toUpperCase()
       });
+    }
+  }
+
+  async function fetchSettings() {
+    const { data } = await supabase.from('shop_settings').select('custom_statuses').eq('id', 1).single();
+    if (data && data.custom_statuses) {
+      setCustomStatuses(data.custom_statuses);
     }
   }
 
@@ -112,8 +121,79 @@ export default function Dashboard() {
       case 'repairing': return `${base} bg-amber-500 text-white shadow-md shadow-amber-500/30`;
       case 'ready_pickup': return `${base} bg-emerald-500 text-white shadow-md shadow-emerald-500/30`;
       case 'completed': return `${base} bg-slate-500 text-white shadow-md shadow-slate-500/30`;
-      default: return `${base} bg-indigo-500 text-white shadow-md shadow-indigo-500/30`;
+      default: return `${base} bg-cyan-500 text-white shadow-md shadow-cyan-500/30`;
     }
+  };
+
+  const getStatusLabel = (val) => {
+    switch (val) {
+      case 'ALL': return 'All Tickets';
+      case 'ACTIVE': return 'Active Workload';
+      case 'MY_WORK': return '👤 My Repairs';
+      case 'ATTENTION': return '⚠️ Attention Needed';
+      case 'intake': return 'In Queue';
+      case 'diagnosing': return 'Diagnosing';
+      case 'waiting_parts': return 'Waiting on Parts';
+      case 'repairing': return 'Repairing';
+      case 'ready_pickup': return 'Ready for Pickup';
+      case 'completed': return 'Completed';
+      default: return val; // Custom Statuses
+    }
+  };
+
+  // --- NEW: REUSABLE CUSTOM DROPDOWN COMPONENT ---
+  const StatusDropdown = ({ value, onChange, size = 'md' }) => {
+    const isSmall = size === 'sm';
+    const triggerClass = isSmall
+      ? "btn h-9 min-h-0 bg-[var(--bg-subtle)] border-[var(--border-color)] text-[var(--text-main)] text-[10px] font-black uppercase tracking-widest shadow-inner focus:border-indigo-500 rounded-lg flex justify-between px-3 w-48"
+      : "btn w-full h-12 bg-[var(--bg-subtle)] border-[var(--border-color)] hover:bg-[var(--bg-surface)] hover:border-indigo-300 shadow-sm flex justify-between items-center px-4 transition-all font-bold text-[var(--text-main)] text-sm";
+
+    const menuClass = isSmall
+      ? "dropdown-content z-[60] menu p-2 shadow-2xl bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl w-56 mt-2 animate-pop" // Let it auto adjust height!
+      : "dropdown-content z-[60] menu p-2 shadow-2xl bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl w-full mt-2 animate-pop"; // Let it auto adjust height!
+
+    return (
+      <div className={`dropdown ${isSmall ? '' : 'w-full'}`}>
+        <div tabIndex={0} role="button" className={triggerClass}>
+          <span className="truncate pr-2">{getStatusLabel(value)}</span>
+          <ChevronDown size={isSmall ? 14 : 16} className="opacity-70 flex-none" />
+        </div>
+        <ul tabIndex={0} className={menuClass}>
+          {/* Dashboard Views */}
+          <li className="menu-title text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] px-2 py-1">Views</li>
+          <li><button onClick={(e) => { onChange('ALL'); e.currentTarget.blur(); }} className={`font-bold py-2.5 rounded-lg ${value === 'ALL' ? 'bg-[var(--bg-subtle)] text-indigo-600 dark:text-indigo-400' : 'text-[var(--text-main)] hover:bg-[var(--bg-subtle)]'}`}>All Tickets</button></li>
+          <li><button onClick={(e) => { onChange('ACTIVE'); e.currentTarget.blur(); }} className={`font-bold py-2.5 rounded-lg ${value === 'ACTIVE' ? 'bg-[var(--bg-subtle)] text-indigo-600 dark:text-indigo-400' : 'text-[var(--text-main)] hover:bg-[var(--bg-subtle)]'}`}>Active Workload</button></li>
+          <li><button onClick={(e) => { onChange('MY_WORK'); e.currentTarget.blur(); }} className={`font-bold py-2.5 rounded-lg ${value === 'MY_WORK' ? 'bg-[var(--bg-subtle)] text-indigo-600 dark:text-indigo-400' : 'text-[var(--text-main)] hover:bg-[var(--bg-subtle)]'}`}>👤 My Repairs</button></li>
+          <li><button onClick={(e) => { onChange('ATTENTION'); e.currentTarget.blur(); }} className={`font-bold py-2.5 rounded-lg ${value === 'ATTENTION' ? 'bg-[var(--bg-subtle)] text-indigo-600 dark:text-indigo-400' : 'text-[var(--text-main)] hover:bg-[var(--bg-subtle)]'}`}>⚠️ Attention Needed</button></li>
+
+          <div className="border-t border-dashed border-[var(--border-color)] my-2 mx-2"></div>
+
+          {/* Core Statuses */}
+          <li className="menu-title text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] px-2 py-1">Core Statuses</li>
+          <li><button onClick={(e) => { onChange('intake'); e.currentTarget.blur(); }} className={`font-bold py-2.5 rounded-lg ${value === 'intake' ? 'bg-[var(--bg-subtle)] text-indigo-600 dark:text-indigo-400' : 'text-[var(--text-main)] hover:bg-[var(--bg-subtle)]'}`}><div className="w-2.5 h-2.5 rounded-full bg-blue-500 mr-2 shadow-sm"></div> In Queue</button></li>
+          <li><button onClick={(e) => { onChange('diagnosing'); e.currentTarget.blur(); }} className={`font-bold py-2.5 rounded-lg ${value === 'diagnosing' ? 'bg-[var(--bg-subtle)] text-indigo-600 dark:text-indigo-400' : 'text-[var(--text-main)] hover:bg-[var(--bg-subtle)]'}`}><div className="w-2.5 h-2.5 rounded-full bg-purple-500 mr-2 shadow-sm"></div> Diagnosing</button></li>
+          <li><button onClick={(e) => { onChange('waiting_parts'); e.currentTarget.blur(); }} className={`font-bold py-2.5 rounded-lg ${value === 'waiting_parts' ? 'bg-[var(--bg-subtle)] text-indigo-600 dark:text-indigo-400' : 'text-[var(--text-main)] hover:bg-[var(--bg-subtle)]'}`}><div className="w-2.5 h-2.5 rounded-full bg-orange-500 mr-2 shadow-sm"></div> Waiting on Parts</button></li>
+          <li><button onClick={(e) => { onChange('repairing'); e.currentTarget.blur(); }} className={`font-bold py-2.5 rounded-lg ${value === 'repairing' ? 'bg-[var(--bg-subtle)] text-indigo-600 dark:text-indigo-400' : 'text-[var(--text-main)] hover:bg-[var(--bg-subtle)]'}`}><div className="w-2.5 h-2.5 rounded-full bg-amber-500 mr-2 shadow-sm"></div> Repairing</button></li>
+          <li><button onClick={(e) => { onChange('ready_pickup'); e.currentTarget.blur(); }} className={`font-bold py-2.5 rounded-lg ${value === 'ready_pickup' ? 'bg-[var(--bg-subtle)] text-indigo-600 dark:text-indigo-400' : 'text-[var(--text-main)] hover:bg-[var(--bg-subtle)]'}`}><div className="w-2.5 h-2.5 rounded-full bg-emerald-500 mr-2 shadow-sm"></div> Ready for Pickup</button></li>
+          <li><button onClick={(e) => { onChange('completed'); e.currentTarget.blur(); }} className={`font-bold py-2.5 rounded-lg ${value === 'completed' ? 'bg-[var(--bg-subtle)] text-indigo-600 dark:text-indigo-400' : 'text-[var(--text-main)] hover:bg-[var(--bg-subtle)]'}`}><div className="w-2.5 h-2.5 rounded-full bg-slate-500 mr-2 shadow-sm"></div> Completed</button></li>
+
+          {/* Custom Statuses */}
+          {customStatuses.length > 0 && (
+            <>
+              <div className="border-t border-dashed border-[var(--border-color)] my-2 mx-2"></div>
+              <li className="menu-title text-[9px] font-black uppercase tracking-widest text-[var(--text-muted)] px-2 py-1">Custom Statuses</li>
+              {customStatuses.map(status => (
+                <li key={status}>
+                  <button onClick={(e) => { onChange(status); e.currentTarget.blur(); }} className={`font-bold py-2.5 rounded-lg ${value === status ? 'bg-[var(--bg-subtle)] text-indigo-600 dark:text-indigo-400' : 'text-[var(--text-main)] hover:bg-[var(--bg-subtle)]'}`}>
+                    <div className="w-2.5 h-2.5 rounded-full bg-cyan-500 mr-2 shadow-sm"></div> {status}
+                  </button>
+                </li>
+              ))}
+            </>
+          )}
+        </ul>
+      </div>
+    );
   };
 
   const clearFilters = () => {
@@ -250,18 +330,13 @@ export default function Dashboard() {
           <div className="absolute top-14 left-0 right-0 bg-[var(--bg-surface)] rounded-2xl border border-[var(--border-color)] p-5 shadow-2xl animate-pop z-40 mt-2">
             <div className="form-control w-full mb-5">
               <label className="label py-0 mb-2"><span className="label-text text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">Ticket Status</span></label>
-              <select className="select select-bordered w-full font-bold shadow-sm bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)]" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-                <option value="ALL">All Tickets</option>
-                <option value="ACTIVE">Active Workload</option>
-                <option value="MY_WORK">👤 My Repairs</option>
-                <option value="ATTENTION">⚠️ Attention Needed</option>
-                <hr disabled />
-                <option value="intake">Intake</option>
-                <option value="diagnosing">Diagnosing</option>
-                <option value="repairing">Repairing</option>
-                <option value="ready_pickup">Ready for Pickup</option>
-                <option value="completed">Completed</option>
-              </select>
+
+              {/* --- NEW STYLED MOBILE DROPDOWN --- */}
+              <StatusDropdown
+                value={statusFilter}
+                onChange={(val) => { setStatusFilter(val); setIsMobileFilterOpen(false); }}
+              />
+
             </div>
             <div className="grid grid-cols-3 gap-3">
               <button onClick={() => { setStatusFilter('ACTIVE'); setIsMobileFilterOpen(false); }} className={`flex flex-col items-center justify-center p-3 rounded-xl border transition-all duration-300 ${statusFilter === 'ACTIVE' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30 border-emerald-500 scale-105' : 'bg-[var(--bg-subtle)] text-[var(--text-muted)] border-[var(--border-color)] hover:border-emerald-400'}`}>
@@ -304,18 +379,10 @@ export default function Dashboard() {
 
                 <div className="form-control w-full">
                   <label className="label py-0 mb-2"><span className="label-text text-[10px] font-black uppercase tracking-widest text-[var(--text-muted)]">Ticket Status</span></label>
-                  <select className="select select-bordered w-full font-bold shadow-sm bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)]" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-                    <option value="ALL">All Tickets</option>
-                    <option value="ACTIVE">Active Workload</option>
-                    <option value="MY_WORK">👤 My Repairs</option>
-                    <option value="ATTENTION">⚠️ Attention Needed</option>
-                    <hr disabled />
-                    <option value="intake">Intake</option>
-                    <option value="diagnosing">Diagnosing</option>
-                    <option value="repairing">Repairing</option>
-                    <option value="ready_pickup">Ready for Pickup</option>
-                    <option value="completed">Completed</option>
-                  </select>
+
+                  {/* --- NEW STYLED SIDEBAR DROPDOWN --- */}
+                  <StatusDropdown value={statusFilter} onChange={setStatusFilter} />
+
                 </div>
 
                 <div className="form-control w-full mt-5">
@@ -381,7 +448,6 @@ export default function Dashboard() {
                   {statusFilter === 'BACKORDER' ? 'WAITING (PARTS)' : statusFilter.replace('_', ' ')}
                 </div>
               ) : (
-                // --- CUSTOM TIMEFRAME DROPDOWN ---
                 <div className="dropdown">
                   <div tabIndex={0} role="button" className="btn btn-sm h-8 bg-indigo-500 hover:bg-indigo-600 text-white border-none shadow-md flex justify-between items-center px-4 transition-all w-36">
                     <span className="font-black uppercase tracking-widest text-[10px] truncate">
@@ -416,12 +482,10 @@ export default function Dashboard() {
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] group-focus-within:text-indigo-500 transition-colors" size={14} />
                     <input type="text" className="input input-sm h-9 w-48 pl-9 bg-[var(--bg-subtle)] focus:bg-[var(--bg-surface)] text-[var(--text-main)] shadow-inner border-[var(--border-color)] focus:border-indigo-500 transition-all font-medium text-xs rounded-lg" placeholder="Search board..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
                   </div>
-                  <select className="select select-sm h-9 bg-[var(--bg-subtle)] border-[var(--border-color)] text-[var(--text-main)] text-[10px] font-black uppercase tracking-widest shadow-inner focus:border-indigo-500 rounded-lg" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-                    <option value="ALL">All Tickets</option>
-                    <option value="ACTIVE">Active Workload</option>
-                    <option value="MY_WORK">My Repairs</option>
-                    <option value="ATTENTION">Needs Attention</option>
-                  </select>
+
+                  {/* --- NEW STYLED KANBAN DROPDOWN --- */}
+                  <StatusDropdown value={statusFilter} onChange={setStatusFilter} size="sm" />
+
                 </div>
               )}
 
@@ -577,7 +641,7 @@ export default function Dashboard() {
                 </div>
               ) : viewMode === 'board' ? (
                 <div className="overflow-x-auto h-[calc(100vh-250px)] pb-4 custom-scrollbar">
-                  <KanbanBoard tickets={filteredTickets} onTicketUpdate={fetchTickets} />
+                  <KanbanBoard tickets={filteredTickets} onTicketUpdate={fetchTickets} customStatuses={customStatuses} />
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">

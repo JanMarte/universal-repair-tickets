@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { formatCurrency } from '../utils';
-import { CheckCircle, AlertCircle, ArrowRight, Package, Wrench, Lock, Receipt } from 'lucide-react';
+import { CheckCircle, AlertCircle, ArrowRight, Package, Wrench, Lock, Receipt, CalendarClock } from 'lucide-react';
 import { useToast } from '../context/ToastProvider';
 import confetti from 'canvas-confetti';
+import { addDays, format } from 'date-fns'; // <-- Need this for calculating expiration date
 
 export default function CustomerEstimateView({ ticketId }) {
     const [ticket, setTicket] = useState(null);
     const [items, setItems] = useState([]);
-    const [shopSettings, setShopSettings] = useState(null); // <-- NEW STATE
+    const [shopSettings, setShopSettings] = useState(null);
     const [loading, setLoading] = useState(true);
     const [approving, setApproving] = useState(false);
     const { addToast } = useToast();
@@ -20,11 +21,8 @@ export default function CustomerEstimateView({ ticketId }) {
     async function fetchData() {
         setLoading(true);
 
-        // Fetch Ticket & Items
         const { data: ticketData } = await supabase.from('tickets').select('*').eq('id', ticketId).single();
         const { data: itemsData } = await supabase.from('estimate_items').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true });
-
-        // Fetch Shop Settings for Tax Rate
         const { data: settingsData } = await supabase.from('shop_settings').select('*').eq('id', 1).single();
 
         setTicket(ticketData);
@@ -69,8 +67,11 @@ export default function CustomerEstimateView({ ticketId }) {
     const approvedItems = items.filter(i => i.is_approved === true);
     const pendingItems = items.filter(i => i.is_approved !== true);
 
-    // --- DYNAMIC TAX CALCULATION ---
-    const taxRate = shopSettings?.tax_rate || 0.07; // Default to 7% if missing
+    const taxRate = shopSettings?.tax_rate || 0.07;
+    const validDays = shopSettings?.estimate_valid_days || 30; // Default 30 days
+
+    // Calculate Expiration Date based on when the ticket was created (or you could use when estimate was sent)
+    const expirationDate = addDays(new Date(ticket.created_at), validDays);
 
     const calcTotal = (itemList) => {
         const sub = itemList.reduce((sum, i) => sum + (i.part_cost || 0) + (i.labor_cost || 0), 0);
@@ -112,7 +113,6 @@ export default function CustomerEstimateView({ ticketId }) {
                         ))}
                     </div>
 
-                    {/* SHOW TAX RATE ON RECEIPT */}
                     <div className="flex justify-between items-center pt-3 mt-3 border-t border-[var(--border-color)]">
                         <span className="text-[10px] font-bold text-[var(--text-muted)]">Subtotal</span>
                         <span className="text-xs font-bold text-[var(--text-main)]">{formatCurrency(approvedItems.reduce((sum, i) => sum + (i.part_cost || 0) + (i.labor_cost || 0), 0))}</span>
@@ -139,6 +139,11 @@ export default function CustomerEstimateView({ ticketId }) {
                             <h3 className="text-[10px] font-black uppercase tracking-widest text-indigo-500 flex items-center gap-2">
                                 <AlertCircle size={16} /> Action Required
                             </h3>
+
+                            {/* --- NEW: Expiration Badge --- */}
+                            <span className="bg-[var(--bg-subtle)] text-[var(--text-muted)] border border-[var(--border-color)] text-[8px] font-black uppercase tracking-widest px-2 py-1 rounded-md shadow-inner flex items-center gap-1">
+                                <CalendarClock size={10} /> Valid thru {format(expirationDate, 'MMM d')}
+                            </span>
                         </div>
 
                         <p className="text-xs font-bold text-[var(--text-muted)] mb-4">

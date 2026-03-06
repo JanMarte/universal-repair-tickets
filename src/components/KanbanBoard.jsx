@@ -6,18 +6,30 @@ import { supabase } from '../supabaseClient';
 import { useToast } from '../context/ToastProvider';
 
 // Using native HTML5 Drag and Drop for optimal performance and zero dependencies
-export default function KanbanBoard({ tickets, onTicketUpdate }) {
+// --- NEW: Added customStatuses prop ---
+export default function KanbanBoard({ tickets, onTicketUpdate, customStatuses = [] }) {
     const navigate = useNavigate();
     const { addToast } = useToast();
 
-    // Define the columns based on your specific repair pipeline
-    const columns = [
+    // Define the core columns based on your specific repair pipeline
+    const coreColumns = [
         { id: 'intake', title: 'In Queue', border: 'border-t-blue-500', text: 'text-blue-600 dark:text-blue-400' },
         { id: 'diagnosing', title: 'Diagnosing', border: 'border-t-purple-500', text: 'text-purple-600 dark:text-purple-400' },
         { id: 'waiting_parts', title: 'Waiting Parts', border: 'border-t-orange-500', text: 'text-orange-600 dark:text-orange-400' },
         { id: 'repairing', title: 'Repairing', border: 'border-t-amber-500', text: 'text-amber-600 dark:text-amber-400' },
         { id: 'ready_pickup', title: 'Ready for Pickup', border: 'border-t-emerald-500', text: 'text-emerald-600 dark:text-emerald-400' }
     ];
+
+    // --- NEW: Map the user's custom settings strings into renderable Kanban columns ---
+    const customColumns = customStatuses.map(status => ({
+        id: status,
+        title: status,
+        border: 'border-t-cyan-500',
+        text: 'text-cyan-600 dark:text-cyan-400'
+    }));
+
+    // Combine them so the custom columns appear at the end of the board
+    const columns = [...coreColumns, ...customColumns];
 
     const handleDragStart = (e, ticketId) => {
         e.dataTransfer.setData('ticketId', ticketId);
@@ -77,10 +89,10 @@ export default function KanbanBoard({ tickets, onTicketUpdate }) {
                     >
                         {/* Column Header */}
                         <div className={`p-4 bg-[var(--bg-surface)] border-b-2 border-dashed border-[var(--border-color)] border-t-[4px] ${column.border} shadow-sm shrink-0 flex justify-between items-center`}>
-                            <h2 className={`text-xs font-black uppercase tracking-widest ${column.text}`}>
+                            <h2 className={`text-xs font-black uppercase tracking-widest ${column.text} truncate pr-2`}>
                                 {column.title}
                             </h2>
-                            <span className="bg-[var(--bg-subtle)] text-[var(--text-muted)] text-[10px] font-black px-2 py-0.5 rounded-full border border-[var(--border-color)] shadow-inner">
+                            <span className="bg-[var(--bg-subtle)] text-[var(--text-muted)] text-[10px] font-black px-2 py-0.5 rounded-full border border-[var(--border-color)] shadow-inner flex-none">
                                 {columnTickets.length}
                             </span>
                         </div>
@@ -129,7 +141,7 @@ export default function KanbanBoard({ tickets, onTicketUpdate }) {
                                             </p>
 
                                             {isUrgent && (
-                                                <div className="flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-red-500 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded-md mb-2">
+                                                <div className="flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-red-500 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded-md mb-2 w-max">
                                                     <AlertTriangle size={10} /> Action Needed
                                                 </div>
                                             )}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Save, Search, FileText, Smartphone, Hash, User, Mail, Phone, CheckCircle, AlertCircle, Tag, Cpu, PlusCircle, Scale, Check } from 'lucide-react'; // <-- Added 'Check'
+import { X, Save, Search, FileText, Smartphone, Hash, User, Mail, Phone, CheckCircle, AlertCircle, Tag, Cpu, PlusCircle, Scale, Check } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { useToast } from '../context/ToastProvider';
 import { formatPhoneNumber } from '../utils';
@@ -12,7 +12,7 @@ export default function IntakeModal({ isOpen, onClose, onTicketCreated, initialC
     const [selectedCustomer, setSelectedCustomer] = useState(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // Terms of Service State
+    // Terms of Service & Settings State
     const [shopTerms, setShopTerms] = useState('');
     const [termsAccepted, setTermsAccepted] = useState(false);
 
@@ -39,7 +39,7 @@ export default function IntakeModal({ isOpen, onClose, onTicketCreated, initialC
             setDevice({ brand: '', model: '', serial: '', description: '' });
             setTermsAccepted(false);
             fetchCatalog();
-            fetchSettings();
+            fetchSettings(); // This will inject our default description!
 
             if (initialCustomer) {
                 setActiveTab('existing');
@@ -56,9 +56,13 @@ export default function IntakeModal({ isOpen, onClose, onTicketCreated, initialC
     }, [isOpen, initialCustomer]);
 
     async function fetchSettings() {
-        const { data } = await supabase.from('shop_settings').select('intake_terms').eq('id', 1).single();
-        if (data && data.intake_terms) {
-            setShopTerms(data.intake_terms);
+        // --- NEW: Fetching default_ticket_desc alongside terms ---
+        const { data } = await supabase.from('shop_settings').select('intake_terms, default_ticket_desc').eq('id', 1).single();
+        if (data) {
+            if (data.intake_terms) setShopTerms(data.intake_terms);
+            if (data.default_ticket_desc) {
+                setDevice(prev => ({ ...prev, description: data.default_ticket_desc }));
+            }
         }
     }
 
@@ -183,6 +187,20 @@ export default function IntakeModal({ isOpen, onClose, onTicketCreated, initialC
 
             if (ticketError) throw ticketError;
 
+            // --- NEW: AUTO-LEARN DEVICE CATALOG ---
+            // If this exact brand and model combination doesn't exist in the catalog, add it!
+            const deviceExists = catalog.some(
+                item => item.brand.toLowerCase() === device.brand.trim().toLowerCase() &&
+                    item.model.toLowerCase() === device.model.trim().toLowerCase()
+            );
+
+            if (!deviceExists) {
+                await supabase.from('device_catalog').insert([{
+                    brand: device.brand.trim(),
+                    model: device.model.trim()
+                }]);
+            }
+
             await supabase.from('audit_logs').insert([{
                 ticket_id: newTicket.id,
                 actor_name: 'System',
@@ -280,7 +298,7 @@ export default function IntakeModal({ isOpen, onClose, onTicketCreated, initialC
                                                 onClick={() => {
                                                     setSelectedCustomer(customer);
                                                     setSearchTerm(customer.full_name);
-                                                    setSearchResults([]);
+                                                    searchResults.length = 0;
                                                     clearError('customerSearch');
                                                 }}
                                             >
@@ -434,7 +452,6 @@ export default function IntakeModal({ isOpen, onClose, onTicketCreated, initialC
                     <button onClick={onClose} type="button" className="btn btn-ghost font-bold text-[var(--text-muted)] hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 border border-transparent hover:border-red-200 dark:hover:border-red-900/30 transition-all">
                         Cancel
                     </button>
-                    {/* Button physically disabled until terms are met (if terms exist) */}
                     <button
                         onClick={handleSubmit}
                         disabled={isSubmitting || (shopTerms && !termsAccepted)}
